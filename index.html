@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vision iris — Smart Classroom Automation Infrastructure</title>
+  <meta name="description" content="Transform existing CCTV systems into intelligent energy automation infrastructure using advanced AI occupancy detection and IoT control.">
+  
+  <!-- FontAwesome for Premium Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Animated Cyberpunk Grid Background -->
+  <div class="grid-bg"></div>
+
+  <!-- ==================== DESKTOP NAVIGATION BAR ==================== -->
+  <header class="navbar" id="desktop-navbar">
+    <div class="logo-container" onclick="showView('landing')">
+      <div class="logo-icon">V</div>
+      <span>VISION<span class="logo-text">GRID AI</span></span>
+    </div>
+    <ul class="nav-links">
+      <li class="nav-item active" id="nav-landing"><a href="#" onclick="showView('landing')">Home</a></li>
+      <li class="nav-item" id="nav-console-link"><a href="#" onclick="checkAuthAndGo('dashboard')">Console</a></li>
+      <li class="nav-item"><a href="#features" onclick="scrollToSection('features')">Features</a></li>
+      <li class="nav-item"><a href="#architecture" onclick="scrollToSection('architecture')">AI Engine</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="btn btn-secondary" onclick="checkAuthAndGo('dashboard')">Live Demo <span class="badge-online"></span></button>
+      <button class="btn btn-primary" id="login-nav-btn" onclick="showView('login')">Launch Console</button>
+    </div>
+  </header>
+
+  <!-- ==================== MOBILE NAVIGATION BAR ==================== -->
+  <header class="mobile-navbar">
+    <div class="logo-container" onclick="showView('landing')">
+      <div class="logo-icon">V</div>
+      <span>VISION<span class="logo-text">GRID</span></span>
+    </div>
+    <button class="btn btn-ghost" style="padding: 8px;" onclick="toggleMobileSidebar()"><i class="fa-solid fa-bars" style="font-size: 1.25rem;"></i></button>
+  </header>
+
+  <!-- ==================== LANDING VIEW ==================== -->
+  <main id="landing-view">
+    <!-- Hero Section -->
+    <section class="container hero-section">
+      <div class="hero-content">
+        <span class="hero-subtitle">Vision iris platform</span>
+        <h1 class="display-text">Transform Existing <span class="logo-text">CCTV Systems</span> Into Intelligent Automation</h1>
+        <p class="body-text hero-desc">AI-powered classroom occupancy detection and centralized IoT resource control using existing CCTV networks. Sub-100ms MQTT device response, 99.2% computer vision accuracy.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" onclick="showView('login')">Get Started <i class="fa-solid fa-arrow-right"></i></button>
+          <button class="btn btn-secondary" onclick="checkAuthAndGo('dashboard')">Live Campus Demo <i class="fa-solid fa-play"></i></button>
+        </div>
+        
+        <!-- Floating Live Stat Cards -->
+        <div class="hero-stats-mini">
+          <div class="glass-card hero-stat-card">
+            <span class="label"><span class="live-dot"></span>Live</span>
+            <span class="value" id="landing-stat-rooms">47 Rooms</span>
+            <span class="caption-text">Monitoring Now</span>
+          </div>
+          <div class="glass-card hero-stat-card">
+            <span class="label" style="color: var(--success);"><i class="fa-solid fa-bolt"></i> Savings</span>
+            <span class="value" id="landing-stat-savings">34% Less</span>
+            <span class="caption-text">Power Consumed</span>
+          </div>
+          <div class="glass-card hero-stat-card">
+            <span class="label" style="color: var(--primary-accent);"><i class="fa-solid fa-eye"></i> Detected</span>
+            <span class="value" id="landing-stat-people">156 People</span>
+            <span class="caption-text">Active Campus</span>
+          </div>
+          <div class="glass-card hero-stat-card">
+            <span class="label" style="color: var(--secondary-accent);"><i class="fa-solid fa-wifi"></i> Devices</span>
+            <span class="value" id="landing-stat-devices">89 Online</span>
+            <span class="caption-text">ESP32 Relays</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Interactive Architecture Diagram in Hero -->
+      <div class="hero-visual">
+        <svg viewBox="0 0 500 500" class="hero-isometric-canvas" xmlns="http://www.w3.org/2000/svg">
+          <!-- Background Grid Matrix -->
+          <defs>
+            <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.15" />
+              <stop offset="100%" stop-color="#00d4ff" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="250" cy="250" r="220" fill="url(#glow)"/>
+          
+          <!-- Isometric Campus Elements -->
+          <!-- Central Hub -->
+          <g transform="translate(250, 220)">
+            <polygon points="0,-40 60,-10 0,20 -60,-10" fill="rgba(22, 27, 34, 0.8)" stroke="#7c3aed" stroke-width="2" />
+            <polygon points="0,-35 50,-10 0,15 -50,-10" fill="rgba(0, 212, 255, 0.1)" stroke="#00d4ff" stroke-width="1" />
+            <polygon points="-60,-10 -60,10 0,40 0,20" fill="rgba(13, 17, 23, 0.9)" stroke="#7c3aed" stroke-width="1" />
+            <polygon points="60,-10 60,10 0,40 0,20" fill="rgba(22, 27, 34, 0.9)" stroke="#7c3aed" stroke-width="1" />
+            <text x="0" y="-3" fill="#ffffff" font-family="'JetBrains Mono'" font-size="10" font-weight="bold" text-anchor="middle">AI CORE</text>
+            <circle cx="0" cy="-45" r="6" fill="#00d4ff" filter="drop-shadow(0 0 6px #00d4ff)"/>
+          </g>
+          
+          <!-- Nodes around AI Core -->
+          <!-- CCTV Node -->
+          <g transform="translate(100, 150)">
+            <polygon points="0,-25 40,-5 0,15 -40,-5" fill="rgba(22, 27, 34, 0.8)" stroke="#00d4ff" stroke-width="1.5" />
+            <text x="0" y="2" fill="#8b949e" font-family="'JetBrains Mono'" font-size="9" text-anchor="middle">📹 CCTV</text>
+          </g>
+          
+          <!-- Cloud Dashboard Node -->
+          <g transform="translate(400, 150)">
+            <polygon points="0,-25 40,-5 0,15 -40,-5" fill="rgba(22, 27, 34, 0.8)" stroke="#00d4ff" stroke-width="1.5" />
+            <text x="0" y="2" fill="#8b949e" font-family="'JetBrains Mono'" font-size="9" text-anchor="middle">☁️ CLOUD</text>
+          </g>
+          
+          <!-- IoT Node -->
+          <g transform="translate(250, 370)">
+            <polygon points="0,-25 40,-5 0,15 -40,-5" fill="rgba(22, 27, 34, 0.8)" stroke="#7c3aed" stroke-width="1.5" />
+            <text x="0" y="2" fill="#8b949e" font-family="'JetBrains Mono'" font-size="9" text-anchor="middle">📡 ESP32</text>
+          </g>
+          
+          <!-- Connecting Flux Lines -->
+          <path d="M 120 160 L 210 205" stroke="#00d4ff" stroke-width="2" stroke-dasharray="6 6" fill="none" class="pulse-line"/>
+          <path d="M 290 205 L 380 160" stroke="#00d4ff" stroke-width="2" stroke-dasharray="6 6" fill="none" class="pulse-line"/>
+          <path d="M 250 240 L 250 345" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6 6" fill="none" class="pulse-line"/>
+          <path d="M 370 165 L 280 355" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section" id="features">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">Intelligent Infrastructure</span>
+          <h2>Platform Core Features</h2>
+          <p class="body-text" style="max-width: 580px;">Everything required to scale hardware-agnostic smart classrooms across single campuses or multi-site university infrastructure.</p>
+        </div>
+        
+        <div class="features-grid">
+          <!-- Card 1 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-eye"></i></div>
+            <h3 class="feature-title">AI Occupancy Detection</h3>
+            <p class="body-text">Computer vision networks monitor room activity, identifying human presence with 99.2% accuracy. Zero false-triggers from shadows or static elements.</p>
+          </div>
+          <!-- Card 2 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-video"></i></div>
+            <h3 class="feature-title">CCTV Integration</h3>
+            <p class="body-text">Hooks natively into existing campus RTSP stream cameras. No expensive proprietary sensors, hardware overhauls, or camera swap-outs.</p>
+          </div>
+          <!-- Card 3 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-bolt"></i></div>
+            <h3 class="feature-title">ESP32 Device Automation</h3>
+            <p class="body-text">Direct integration with ESP32-powered automated relay controls. Instantaneous physical switching of high-load HVAC and lighting units.</p>
+          </div>
+          <!-- Card 4 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-circle-nodes"></i></div>
+            <h3 class="feature-title">Real-Time MQTT protocol</h3>
+            <p class="body-text">Sub-100ms command latency with highly optimized, lightweight MQTT message streams. Ensures devices execute states near-instantaneously.</p>
+          </div>
+          <!-- Card 5 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-leaf"></i></div>
+            <h3 class="feature-title">Smart Energy Optimization</h3>
+            <p class="body-text">Automated timers, room emptying cooldown loops, and intelligent HVAC temperature control reduce monthly utility expenses by up to 40%.</p>
+          </div>
+          <!-- Card 6 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-network-wired"></i></div>
+            <h3 class="feature-title">Multi-Campus Dashboard</h3>
+            <p class="body-text">Global administration panels monitor MIT, Stanford, Berkeley, and other sites side-by-side. Consolidate logs, updates, and metrics cleanly.</p>
+          </div>
+          <!-- Card 7 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-chart-line"></i></div>
+            <h3 class="feature-title">Analytics & Predictions</h3>
+            <p class="body-text">Map complex usage cycles, load peaks, device diagnostics, and utility consumption predictions within gorgeous real-time dashboards.</p>
+          </div>
+          <!-- Card 8 -->
+          <div class="glass-card feature-card">
+            <div class="feature-icon"><i class="fa-solid fa-sliders"></i></div>
+            <h3 class="feature-title">Centralized Rule Builder</h3>
+            <p class="body-text">Design triggers using a visual conditional flow engine. Test rule sets instantly in visual environments before deploying to the campus.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- System Architecture Section -->
+    <section class="architecture-section" id="architecture">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">System Architecture</span>
+          <h2>End-to-End Intelligent Pipeline</h2>
+          <p class="body-text" style="max-width: 580px;">How Vision iris links camera networks, cloud analytics, broker signals, and physical classroom switches.</p>
+        </div>
+        
+        <div class="architecture-wrapper">
+          <div class="arch-svg-container">
+            <svg viewBox="0 0 600 650" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+              <!-- Grid Background inside Container -->
+              <defs>
+                <pattern id="arch-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(0, 212, 255, 0.02)" stroke-width="1"/>
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#arch-grid)" rx="8"/>
+              
+              <!-- Flows / Pulsing connection lines -->
+              <!-- CCTV to AI Engine -->
+              <path d="M 300 75 L 300 135" stroke="#00d4ff" stroke-width="2" class="pulse-line" id="flow-cctv-ai" />
+              <!-- AI Engine to Cloud -->
+              <path d="M 300 195 L 300 255" stroke="#00d4ff" stroke-width="2" class="pulse-line" id="flow-ai-cloud" />
+              <!-- Cloud to MQTT -->
+              <path d="M 300 315 L 300 375" stroke="#7c3aed" stroke-width="2" class="pulse-line" id="flow-cloud-mqtt" />
+              
+              <!-- MQTT to ESP32 Nodes (Branching) -->
+              <path d="M 300 435 L 300 470 L 120 470 L 120 500" stroke="#7c3aed" stroke-width="1.5" class="pulse-line" />
+              <path d="M 300 435 L 300 500" stroke="#7c3aed" stroke-width="1.5" class="pulse-line" />
+              <path d="M 300 435 L 300 470 L 480 470 L 480 500" stroke="#7c3aed" stroke-width="1.5" class="pulse-line" />
+              
+              <!-- ESP32 to Relays -->
+              <path d="M 120 540 L 120 570" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4 4" />
+              <path d="M 300 540 L 300 570" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4 4" />
+              <path d="M 480 540 L 480 570" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4 4" />
+              
+              <!-- 1. CCTV Cameras -->
+              <g transform="translate(180, 25)" class="node-box">
+                <rect width="240" height="50" rx="8" fill="rgba(22, 27, 34, 0.9)" stroke="rgba(0, 212, 255, 0.2)" stroke-width="1.5" />
+                <text x="120" y="30" fill="#ffffff" font-family="Inter" font-size="13" font-weight="600" text-anchor="middle">📹 CCTV CAMERAS</text>
+              </g>
+              
+              <!-- 2. AI Detection Engine -->
+              <g transform="translate(180, 145)" class="node-box">
+                <rect width="240" height="50" rx="8" fill="rgba(22, 27, 34, 0.9)" stroke="#00d4ff" stroke-width="1.5" />
+                <text x="120" y="25" fill="#ffffff" font-family="Inter" font-size="13" font-weight="600" text-anchor="middle">🧠 AI DETECTION ENGINE</text>
+                <text x="120" y="40" fill="#8b949e" font-family="JetBrains Mono" font-size="9" text-anchor="middle">YOLOv8 Occupancy Analyzer</text>
+              </g>
+              
+              <!-- 3. Cloud Dashboard -->
+              <g transform="translate(180, 265)" class="node-box">
+                <rect width="240" height="50" rx="8" fill="rgba(22, 27, 34, 0.9)" stroke="rgba(0, 212, 255, 0.2)" stroke-width="1.5" />
+                <text x="120" y="30" fill="#ffffff" font-family="Inter" font-size="13" font-weight="600" text-anchor="middle">☁️ CLOUD DASHBOARD</text>
+              </g>
+              
+              <!-- 4. MQTT Broker -->
+              <g transform="translate(180, 385)" class="node-box">
+                <rect width="240" height="50" rx="8" fill="rgba(22, 27, 34, 0.9)" stroke="#7c3aed" stroke-width="1.5" />
+                <text x="120" y="25" fill="#ffffff" font-family="Inter" font-size="13" font-weight="600" text-anchor="middle">📡 MQTT BROKER</text>
+                <text x="120" y="40" fill="#8b949e" font-family="JetBrains Mono" font-size="9" text-anchor="middle">EMQX / Low Latency Topic Broker</text>
+              </g>
+              
+              <!-- 5. ESP32 Nodes -->
+              <!-- Node 1 -->
+              <g transform="translate(40, 500)" class="node-box">
+                <rect width="160" height="40" rx="6" fill="rgba(22, 27, 34, 0.9)" stroke="rgba(124, 58, 237, 0.3)" stroke-width="1" />
+                <text x="80" y="25" fill="#ffffff" font-family="Inter" font-size="11" font-weight="600" text-anchor="middle">⚡ ESP32 Node 1</text>
+              </g>
+              <!-- Node 2 -->
+              <g transform="translate(220, 500)" class="node-box">
+                <rect width="160" height="40" rx="6" fill="rgba(22, 27, 34, 0.9)" stroke="rgba(124, 58, 237, 0.3)" stroke-width="1" />
+                <text x="80" y="25" fill="#ffffff" font-family="Inter" font-size="11" font-weight="600" text-anchor="middle">⚡ ESP32 Node 2</text>
+              </g>
+              <!-- Node N -->
+              <g transform="translate(400, 500)" class="node-box">
+                <rect width="160" height="40" rx="6" fill="rgba(22, 27, 34, 0.9)" stroke="rgba(124, 58, 237, 0.3)" stroke-width="1" />
+                <text x="80" y="25" fill="#ffffff" font-family="Inter" font-size="11" font-weight="600" text-anchor="middle">⚡ ESP32 Node N</text>
+              </g>
+              
+              <!-- 6. Relays & Load Devices -->
+              <!-- Relay A -->
+              <g transform="translate(50, 570)">
+                <rect width="140" height="35" rx="4" fill="rgba(16, 185, 129, 0.08)" stroke="#10b981" stroke-width="1" />
+                <text x="70" y="22" fill="#10b981" font-family="Inter" font-size="11" font-weight="600" text-anchor="middle">💡 🌀 LIGHTS / FANS</text>
+              </g>
+              <!-- Relay B -->
+              <g transform="translate(230, 570)">
+                <rect width="140" height="35" rx="4" fill="rgba(16, 185, 129, 0.08)" stroke="#10b981" stroke-width="1" />
+                <text x="70" y="22" fill="#10b981" font-family="Inter" font-size="11" font-weight="600" text-anchor="middle">💡 🌀 LIGHTS / FANS</text>
+              </g>
+              <!-- Relay C -->
+              <g transform="translate(410, 570)">
+                <rect width="140" height="35" rx="4" fill="rgba(16, 185, 129, 0.08)" stroke="#10b981" stroke-width="1" />
+                <text x="70" y="22" fill="#10b981" font-family="Inter" font-size="11" font-weight="600" text-anchor="middle">💡 🌀 LIGHTS / FANS</text>
+              </g>
+            </svg>
+          </div>
+          <p class="arch-desc">Hover over connection paths or components in the console to inspect raw telemetry signals.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== LOGIN VIEW ==================== -->
+  <section id="login-view" style="display: none;">
+    <div class="login-view">
+      <div class="glass-card login-card">
+        <div class="login-header">
+          <div class="logo-container" onclick="showView('landing')">
+            <div class="logo-icon">V</div>
+            <span>VISION<span class="logo-text">GRID AI</span></span>
+          </div>
+          <h2 style="font-size: 1.5rem; font-weight: 700; margin-top: 12px;">Welcome Back</h2>
+          <p class="body-text" style="font-size: 0.875rem;">Access the smart campus console panel</p>
+        </div>
+        
+        <form class="login-form" onsubmit="handleLoginSubmit(event)">
+          <div class="form-group">
+            <label class="form-label" for="login-email">Email Address</label>
+            <div class="input-container">
+              <i class="fa-solid fa-envelope input-icon"></i>
+              <input class="form-input" type="email" id="login-email" placeholder="admin@university.edu" required value="admin@mit.edu">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="login-password">Password</label>
+            <div class="input-container">
+              <i class="fa-solid fa-lock input-icon"></i>
+              <input class="form-input" type="password" id="login-password" placeholder="••••••••" required value="password123">
+            </div>
+          </div>
+          <div class="form-options">
+            <label class="remember-me">
+              <input type="checkbox" id="login-remember" checked>
+              <span>Remember me</span>
+            </label>
+            <a href="#" class="forgot-link">Forgot pass?</a>
+          </div>
+          
+          <button class="btn btn-primary" type="submit" style="width: 100%; height: 46px;">Sign In</button>
+        </form>
+        
+        <div class="divider">or continue with</div>
+        
+        <div class="sso-buttons">
+          <button class="sso-btn" onclick="triggerSSOLogin('Google')"><i class="fa-brands fa-google"></i> SSO</button>
+          <button class="sso-btn" onclick="triggerSSOLogin('Microsoft')"><i class="fa-brands fa-microsoft"></i> Microsoft</button>
+        </div>
+        
+        <p class="login-footer">New campus? <a href="#">Contact sales</a></p>
+        
+        <div class="login-roles">
+          <span class="login-role-tag"><i class="fa-solid fa-user-shield"></i> Admin</span>
+          <span class="login-role-tag"><i class="fa-solid fa-graduation-cap"></i> College</span>
+          <span class="login-role-tag"><i class="fa-solid fa-microchip"></i> Device</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ENTERPRISE CONSOLE VIEW ==================== -->
+  <div id="console-view" style="display: none;">
+    <div class="console-layout">
+      <!-- Sidebar Panel -->
+      <aside class="console-sidebar">
+        <ul class="sidebar-menu">
+          <li>
+            <button class="sidebar-btn active" id="btn-sidebar-dashboard" onclick="showConsolePanel('dashboard')">
+              <i class="fa-solid fa-table-columns"></i> <span>Dashboard</span>
+            </button>
+          </li>
+          <li>
+            <button class="sidebar-btn" id="btn-sidebar-cctv" onclick="showConsolePanel('cctv')">
+              <i class="fa-solid fa-video"></i> <span>CCTV Stream</span>
+            </button>
+          </li>
+          <li>
+            <button class="sidebar-btn" id="btn-sidebar-devices" onclick="showConsolePanel('devices')">
+              <i class="fa-solid fa-microchip"></i> <span>Devices</span>
+            </button>
+          </li>
+          <li>
+            <button class="sidebar-btn" id="btn-sidebar-analytics" onclick="showConsolePanel('analytics')">
+              <i class="fa-solid fa-chart-line"></i> <span>Analytics</span>
+            </button>
+          </li>
+          <li>
+            <button class="sidebar-btn" id="btn-sidebar-rules" onclick="showConsolePanel('rules')">
+              <i class="fa-solid fa-sliders"></i> <span>Automation</span>
+            </button>
+          </li>
+          <li>
+            <button class="sidebar-btn" id="btn-sidebar-campuses" onclick="showConsolePanel('campuses')">
+              <i class="fa-solid fa-school"></i> <span>Campuses</span>
+            </button>
+          </li>
+          <li>
+            <button class="sidebar-btn" id="btn-sidebar-alerts" onclick="showConsolePanel('alerts')">
+              <i class="fa-solid fa-bell"></i> <span>Alerts</span>
+              <span class="badge-count" id="sidebar-alert-badge">3</span>
+            </button>
+          </li>
+        </ul>
+        
+        <div class="sidebar-footer">
+          <button class="sidebar-btn" onclick="handleLogout()" style="color: var(--danger);"><i class="fa-solid fa-right-from-bracket"></i> <span>Log Out</span></button>
+          <div class="user-profile">
+            <div class="avatar" id="user-avatar-initials">AD</div>
+            <div class="user-info">
+              <span class="user-name" id="user-display-name">Admin User</span>
+              <span class="user-role" id="user-display-role">Global SuperAdmin</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Workspace Panel -->
+      <main class="console-workspace">
+        
+        <!-- PANEL A: DASHBOARD -->
+        <section id="panel-dashboard" class="console-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Campus Overview</h2>
+              <span class="panel-subtitle" id="dashboard-current-date">May 24, 2026</span>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-secondary" onclick="simulateTelemetryFlicker()" style="padding: 10px 18px;"><i class="fa-solid fa-rotate"></i> Sync Live</button>
+            </div>
+          </div>
+          
+          <div class="dashboard-grid">
+            <!-- Stat widget cards -->
+            <div class="overview-stats">
+              <div class="glass-card stat-card">
+                <span class="stat-label">Active Rooms</span>
+                <div class="stat-value-container">
+                  <span class="stat-value" id="stat-rooms">47</span>
+                  <span class="stat-trend trend-up"><i class="fa-solid fa-caret-up"></i> 3</span>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <span class="stat-label">Occupied Rooms</span>
+                <div class="stat-value-container">
+                  <span class="stat-value" id="stat-occupied">31</span>
+                  <span class="stat-trend" style="color: var(--primary-accent);"><span class="live-dot"></span> Live</span>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <span class="stat-label">Power Usage</span>
+                <div class="stat-value-container">
+                  <span class="stat-value" id="stat-power">2.4kW</span>
+                  <span class="stat-trend trend-down"><i class="fa-solid fa-caret-down"></i> 12%</span>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <span class="stat-label">Devices Online</span>
+                <div class="stat-value-container">
+                  <span class="stat-value" id="stat-devices">89</span>
+                  <span class="stat-trend trend-down" style="font-size:0.75rem;">2 offline</span>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <span class="stat-label">Energy Saved</span>
+                <div class="stat-value-container">
+                  <span class="stat-value" id="stat-saved">34%</span>
+                  <span class="stat-trend trend-up">Target achieved</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Classroom Status Cards Grid -->
+            <div>
+              <h3 class="classroom-section-header">Classroom Resource Status</h3>
+              <div class="classroom-grid" id="classroom-grid-container">
+                <!-- Javascript will inject classrooms here dynamically -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PANEL B: CCTV MONITORING -->
+        <section id="panel-cctv" class="console-panel" style="display: none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Live Surveillance</h2>
+              <span class="panel-subtitle"><span class="live-dot" style="background:var(--danger); box-shadow: 0 0 8px var(--danger);"></span> REC: AI Analytics Stream</span>
+            </div>
+            <div class="panel-actions">
+              <label class="remember-me" style="margin-right: 12px;">
+                <input type="checkbox" id="cctv-detection-toggle" checked onchange="toggleAIDetectionOverlay(this)">
+                <span>AI Overlay</span>
+              </label>
+              <label class="remember-me" style="margin-right: 16px;">
+                <input type="checkbox" id="cctv-heatmap-toggle" onchange="toggleHeatmapOverlay(this)">
+                <span>Heatmap Overlay</span>
+              </label>
+              <button class="btn btn-primary" onclick="triggerMockScreenshot()" style="padding: 10px 18px;"><i class="fa-solid fa-camera"></i> Snapshot All</button>
+            </div>
+          </div>
+          
+          <div class="cctv-grid" id="cctv-grid-container">
+            <!-- CCTV Feeds dynamically rendered with canvas frames by JS -->
+          </div>
+          
+          <div class="activity-log-section">
+            <h3 class="classroom-section-header"><i class="fa-solid fa-scroll"></i> Real-time MQTT Edge Activity Log</h3>
+            <div class="log-container" id="activity-log-container">
+              <!-- Logs dynamically generated by JS simulation loop -->
+            </div>
+          </div>
+        </section>
+
+        <!-- PANEL C: DEVICES MANAGEMENT -->
+        <section id="panel-devices" class="console-panel" style="display: none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Device Configuration</h2>
+              <span class="panel-subtitle">Manage campus ESP32 automated micro-controller units</span>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-secondary" onclick="simulateTelemetryFlicker()"><i class="fa-solid fa-rotate"></i> Sync Status</button>
+              <button class="btn btn-primary" onclick="openAddDeviceModal()"><i class="fa-solid fa-plus"></i> Add ESP32 Node</button>
+            </div>
+          </div>
+          
+          <div class="devices-controls">
+            <div class="filter-bar">
+              <select class="filter-select" id="device-filter-room" onchange="filterDevices()">
+                <option value="all">All Rooms</option>
+                <option value="A101">Room A101</option>
+                <option value="A102">Room A102</option>
+                <option value="A103">Room A103</option>
+                <option value="B201">Room B201</option>
+                <option value="B202">Room B202</option>
+                <option value="B203">Room B203</option>
+              </select>
+              <select class="filter-select" id="device-filter-status" onchange="filterDevices()">
+                <option value="all">Any Status</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="devices-list" id="devices-list-container">
+            <!-- Inject rows from app.js state dynamically -->
+          </div>
+        </section>
+
+        <!-- PANEL D: ANALYTICS -->
+        <section id="panel-analytics" class="console-panel" style="display: none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Analytics & Insights</h2>
+              <span class="panel-subtitle">Monitor energy conservation levels and AI core prediction accuracy</span>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-ghost" onclick="triggerDataExport()"><i class="fa-solid fa-download"></i> Export Data</button>
+            </div>
+          </div>
+          
+          <div class="analytics-grid-top">
+            <!-- Energy consumption chart -->
+            <div class="glass-card chart-card">
+              <div class="chart-header">
+                <span class="chart-title">Energy Consumption -12% MTD</span>
+                <div class="chart-legend">
+                  <span class="legend-item"><span class="legend-color" style="background: var(--primary-accent)"></span> This Week</span>
+                  <span class="legend-item"><span class="legend-color" style="background: var(--secondary-accent)"></span> Last Week</span>
+                </div>
+              </div>
+              <div class="chart-canvas-container">
+                <canvas id="energy-chart" class="camera-canvas"></canvas>
+              </div>
+            </div>
+            
+            <!-- Heatmap -->
+            <div class="glass-card chart-card">
+              <div class="chart-header">
+                <span class="chart-title">Occupancy Heatmap</span>
+              </div>
+              <div class="heatmap-container">
+                <div class="heatmap-weekdays">
+                  <div class="heatmap-row">
+                    <span class="weekday-lbl">M</span>
+                    <div class="heatmap-blocks" id="heatmap-blocks-M"></div>
+                  </div>
+                  <div class="heatmap-row">
+                    <span class="weekday-lbl">T</span>
+                    <div class="heatmap-blocks" id="heatmap-blocks-T"></div>
+                  </div>
+                  <div class="heatmap-row">
+                    <span class="weekday-lbl">W</span>
+                    <div class="heatmap-blocks" id="heatmap-blocks-W"></div>
+                  </div>
+                  <div class="heatmap-row">
+                    <span class="weekday-lbl">T</span>
+                    <div class="heatmap-blocks" id="heatmap-blocks-R"></div>
+                  </div>
+                  <div class="heatmap-row">
+                    <span class="weekday-lbl">F</span>
+                    <div class="heatmap-blocks" id="heatmap-blocks-F"></div>
+                  </div>
+                </div>
+                <div class="heatmap-legend">
+                  <span>Low</span>
+                  <span class="heatmap-legend-block level-low"></span>
+                  <span class="heatmap-legend-block level-med"></span>
+                  <span class="heatmap-legend-block level-high"></span>
+                  <span>High</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="analytics-grid-top">
+            <!-- Accuracy stats -->
+            <div class="glass-card chart-card">
+              <div class="chart-header">
+                <span class="chart-title">AI Detection Accuracy</span>
+                <span class="badge badge-online">98.4%</span>
+              </div>
+              <div class="diag-stats-grid" style="margin-top: 10px;">
+                <div class="diag-item">
+                  <span class="diag-label">True Positives</span>
+                  <span class="diag-val" style="color:var(--success)">12,847</span>
+                </div>
+                <div class="diag-item">
+                  <span class="diag-label">False Positives</span>
+                  <span class="diag-val" style="color:var(--warning)">156</span>
+                </div>
+                <div class="diag-item">
+                  <span class="diag-label">Missed Detects</span>
+                  <span class="diag-val" style="color:var(--danger)">52</span>
+                </div>
+                <div class="diag-item">
+                  <span class="diag-label">Uptime</span>
+                  <span class="diag-val">100%</span>
+                </div>
+              </div>
+              <div class="diag-charts" style="margin-top: 20px;">
+                <div class="diag-chart-bar-container">
+                  <div class="diag-chart-label">
+                    <span>True Positive Ratio</span>
+                    <span>98.4%</span>
+                  </div>
+                  <div class="diag-chart-track">
+                    <div class="diag-chart-fill" style="width: 98.4%; background: var(--success);"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Room utilization -->
+            <div class="glass-card chart-card">
+              <div class="chart-header">
+                <span class="chart-title">Room Utilization</span>
+              </div>
+              <div class="utilization-list" id="utilization-list-container">
+                <!-- Dynamically generated room bar items by JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PANEL E: AUTOMATION RULES -->
+        <section id="panel-rules" class="console-panel" style="display: none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Automation Trigger Rules</h2>
+              <span class="panel-subtitle">Create conditional flow statements that bind AI occupancy values directly to ESP32 node outputs</span>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-primary" onclick="openCreateRuleModal()"><i class="fa-solid fa-plus"></i> Create Rule</button>
+            </div>
+          </div>
+          
+          <div class="rules-list" id="rules-list-container">
+            <!-- Dynamically populated from JS rules database -->
+          </div>
+        </section>
+
+        <!-- PANEL F: MULTI-CAMPUS MANAGEMENT -->
+        <section id="panel-campuses" class="console-panel" style="display: none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Campus Management Portal</h2>
+              <span class="panel-subtitle">Monitor and sync multiple educational institutes globally</span>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-primary" onclick="alert('Campus Portal syncing remote nodes...')"><i class="fa-solid fa-circle-nodes"></i> Sync Campus Registry</button>
+            </div>
+          </div>
+          
+          <div class="campus-stats-summary">
+            <div class="glass-card stat-card">
+              <span class="stat-label">Connected Campuses</span>
+              <div class="stat-value-container">
+                <span class="stat-value">3</span>
+              </div>
+            </div>
+            <div class="glass-card stat-card">
+              <span class="stat-label">Total Rooms</span>
+              <div class="stat-value-container">
+                <span class="stat-value" id="global-stat-rooms">127</span>
+              </div>
+            </div>
+            <div class="glass-card stat-card">
+              <span class="stat-label">Combined power saving</span>
+              <div class="stat-value-container">
+                <span class="stat-value" style="color:var(--success)">8.2kW</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="campus-grid" id="campus-grid-container">
+            <!-- Campuses lists dynamically generated by JS (MIT, Stanford, Berkeley) -->
+          </div>
+        </section>
+
+        <!-- PANEL G: ALERTS & NOTIFICATIONS -->
+        <section id="panel-alerts" class="console-panel" style="display: none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Alerts & Notifications</h2>
+              <span class="panel-subtitle">System warning registries, hardware offline reports, and AI core logs</span>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-ghost" onclick="markAllAlertsAsRead()">Mark All Read</button>
+            </div>
+          </div>
+          
+          <div class="alerts-list" id="alerts-list-container">
+            <!-- Loaded dynamically from JS alert states -->
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ==================== MOBILE BOTTOM TAB NAVIGATION ==================== -->
+  <nav class="mobile-bottom-nav">
+    <button class="mobile-nav-btn active" id="btn-m-home" onclick="handleMobileNavClick('landing')">
+      <i class="fa-solid fa-house"></i>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav-btn" id="btn-m-dash" onclick="handleMobileNavClick('dashboard')">
+      <i class="fa-solid fa-table-columns"></i>
+      <span>Dashboard</span>
+    </button>
+    <button class="mobile-nav-btn" id="btn-m-cctv" onclick="handleMobileNavClick('cctv')">
+      <i class="fa-solid fa-video"></i>
+      <span>CCTV</span>
+    </button>
+    <button class="mobile-nav-btn" id="btn-m-devices" onclick="handleMobileNavClick('devices')">
+      <i class="fa-solid fa-microchip"></i>
+      <span>Devices</span>
+    </button>
+    <button class="mobile-nav-btn" id="btn-m-alerts" onclick="handleMobileNavClick('alerts')">
+      <i class="fa-solid fa-bell"></i>
+      <span>Alerts</span>
+    </button>
+  </nav>
+
+  <!-- ==================== INTERACTIVE RULE BUILDER MODAL ==================== -->
+  <div class="modal-overlay" id="rule-builder-modal">
+    <div class="glass-card modal-card">
+      <div class="modal-header">
+        <h3 id="modal-rule-title">Create Smart Automation Rule</h3>
+        <button class="modal-close-btn" onclick="closeRuleBuilderModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <form onsubmit="handleRuleBuilderSubmit(event)">
+        <div class="rule-builder-canvas">
+          <div class="builder-group">
+            <label class="builder-label">Rule Name</label>
+            <input type="text" class="form-input" id="rule-build-name" placeholder="E.g., Automated Power Saver" required style="padding-left:14px;">
+          </div>
+          
+          <div class="builder-group">
+            <label class="builder-label">IF - Classroom Conditional Trigger</label>
+            <select class="builder-select" id="rule-build-condition">
+              <option value="empty-10">Classroom is empty for 10 minutes</option>
+              <option value="empty-5">Classroom is empty for 5 minutes</option>
+              <option value="occupied">Classroom becomes occupied</option>
+              <option value="temp-30">Room Temperature exceeds 30°C</option>
+              <option value="time-830">Time reaches 8:30 AM (Weekdays)</option>
+            </select>
+          </div>
+          
+          <div class="flow-connector-vertical"></div>
+          
+          <div class="builder-group">
+            <label class="builder-label">THEN - Connected ESP32 Relay Action</label>
+            <select class="builder-select" id="rule-build-action">
+              <option value="off-all">Turn OFF Lights & Fans relays</option>
+              <option value="on-all">Turn ON Lights & Fans relays</option>
+              <option value="on-fan">Turn ON Fans relay only</option>
+              <option value="off-lights">Turn OFF Lights relay only</option>
+            </select>
+          </div>
+          
+          <div class="builder-group">
+            <label class="builder-label">Applies To Campus Classrooms</label>
+            <select class="builder-select" id="rule-build-apply">
+              <option value="all">All Campus Rooms</option>
+              <option value="labs">Computer & Science Labs only</option>
+              <option value="A101">Room A101 only</option>
+              <option value="A103">Room A103 only</option>
+            </select>
+          </div>
+        </div>
+        
+        <div style="display:flex; justify-content: flex-end; gap: 12px; margin-top:24px;">
+          <button type="button" class="btn btn-ghost" onclick="closeRuleBuilderModal()">Cancel</button>
+          <button type="button" class="btn btn-secondary" onclick="simulateRuleValidation()"><i class="fa-solid fa-flask"></i> Verify Rule</button>
+          <button type="submit" class="btn btn-primary">Save & Apply Rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== ADD ESP32 DEVICE MODAL ==================== -->
+  <div class="modal-overlay" id="add-device-modal">
+    <div class="glass-card modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>Configure New ESP32 Node</h3>
+        <button class="modal-close-btn" onclick="closeAddDeviceModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <form onsubmit="handleAddDeviceSubmit(event)">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div class="form-group">
+            <label class="form-label">Node Identifier</label>
+            <input type="text" class="form-input" id="dev-build-name" placeholder="E.g., ESP32-A104" required style="padding-left:14px;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Classroom Location</label>
+            <select class="builder-select" id="dev-build-room">
+              <option value="A101">A101 — Computer Lab</option>
+              <option value="A102">A102 — Lecture Hall</option>
+              <option value="A103">A103 — Seminar Room</option>
+              <option value="B201">B201 — Physics Lab</option>
+              <option value="B202">B202 — Chemistry Lab</option>
+              <option value="B203">B203 — Biology Lab</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">MAC Address</label>
+            <input type="text" class="form-input" id="dev-build-mac" placeholder="3C:61:05:XX:XX:XX" required style="padding-left:14px;" value="3C:61:05:12:34:B4">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Initial Relay Channels</label>
+            <select class="builder-select" id="dev-build-relays">
+              <option value="2">2 Channels (Lights & Fan Relay Control)</option>
+              <option value="4">4 Channels (HVAC, Projector, Lights, Fans)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div style="display:flex; justify-content: flex-end; gap: 12px; margin-top:24px;">
+          <button type="button" class="btn btn-ghost" onclick="closeAddDeviceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Connect Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

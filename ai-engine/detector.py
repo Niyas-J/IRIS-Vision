@@ -1,134 +1,142 @@
+import sys
 import time
+import argparse
 import cv2
 import requests
 
-# ==================== CONFIGURATION ====================
-API_ENDPOINT = "http://localhost:8000/update-state"
-FRAME_INTERVAL = 3.0  # Run inference every 3 seconds to optimize CPU
-COOLDOWN_PERIOD = 10.0  # Turn off after 10 seconds of empty room
-
-# Initialize the OpenCV built-in HOG descriptor for human detection
-hog = cv2.HOGDescriptor()
-hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+# Initialize OpenCV built-in HOG descriptor for human detection
+try:
+    hog = cv2.HOGDescriptor()
+    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    HOG_READY = True
+except Exception as e:
+    print(f"[ERROR] Failed to initialize HOG Descriptor: {e}")
+    HOG_READY = False
 
 def detect_humans(frame):
     """Detects humans in the frame and returns bounding boxes and count."""
-    # Resize frame to speed up HOG processing
+    if not HOG_READY:
+        return 0, []
+    # Resize frame to standard size to speed up HOG processing
     resized = cv2.resize(frame, (640, 480))
-    
     # Detect people
-    # winStroke = (8, 8), padding = (8, 8), scale = 1.05
     (rects, weights) = hog.detectMultiScale(resized, winStride=(8, 8), padding=(8, 8), scale=1.05)
-    
     return len(rects), rects
 
 def main():
+    parser = argparse.ArgumentParser(description="VisionGrid AI Camera Detection Edge Client")
+    parser.add_argument("--camera", type=str, default="0", help="Camera index (0, 1) or RTSP URL")
+    parser.add_argument("--room", type=str, default="A101", help="Target Room ID (e.g. A101, A102)")
+    parser.add_argument("--endpoint", type=str, default="http://localhost:8000/update-state", help="Backend update-state URL")
+    parser.add_argument("--interval", type=float, default=2.0, help="Detection interval seconds")
+    parser.add_argument("--cooldown", type=float, default=10.0, help="Empty room cooldown seconds")
+    parser.add_argument("--headless", action="store_true", help="Run without GUI window")
+    args = parser.parse_args()
+
     print("==========================================================")
     print("      VisionGrid AI - Local Camera Detection Engine       ")
     print("==========================================================")
-    print(f"Target API Endpoint: {API_ENDPOINT}")
-    print(f"AI Sample Rate: Once every {FRAME_INTERVAL} seconds")
-    print(f"Empty Cooldown Timer: {COOLDOWN_PERIOD} seconds")
+    print(f"Target Room: {args.room}")
+    print(f"Target API Endpoint: {args.endpoint}")
+    print(f"AI Sample Rate: Once every {args.interval} seconds")
+    print(f"Empty Cooldown Timer: {args.cooldown} seconds")
     print("----------------------------------------------------------")
-    
+
     # Initialize Camera Capture
-    print("Initializing local webcam stream (Camera index 0)...")
-    cap = cv2.VideoCapture(0)
+    source = int(args.camera) if args.camera.isdigit() else args.camera
+    print(f"Initializing camera stream (Source: {source})...")
     
+    if isinstance(source, int):
+        cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(source)
+    else:
+        cap = cv2.VideoCapture(source)
+
     camera_connected = True
     if not cap.isOpened():
-        print("[WARNING] Local webcam could not be opened (index 0).")
+        print(f"[WARNING] Camera could not be opened (source {args.camera}).")
         print("Switching AI Engine to [SIMULATION MODE] using synthetic frame loops...")
         camera_connected = False
-        
+
     occupied_state = False
     empty_since = None
-    
+
     try:
         while True:
             start_time = time.time()
             human_count = 0
             rects = []
-            
+
             if camera_connected:
-                # Capture frame-by-frame
                 ret, frame = cap.read()
                 if not ret:
                     print("[ERROR] Failed to read frame from webcam.")
                     time.sleep(2)
                     continue
-                    
-                # Run HOG detector
+
                 human_count, rects = detect_humans(frame)
-                
-                # Show standard OpenCV visualization window
-                # Draw boxes
-                for (x, y, w, h) in rects:
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 212, 255), 2)
-                    cv2.putText(frame, "HUMAN", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 212, 255), 2)
-                
-                # Draw room state overlay
-                status_txt = f"Status: {'OCCUPIED' if occupied_state else 'EMPTY'} | Detections: {human_count}"
-                cv2.putText(frame, status_txt, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0) if occupied_state else (0, 0, 255), 2)
-                cv2.imshow("VisionGrid AI - Live Detection View", frame)
-                
-                # Wait 1ms to process UI window events
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    print("Exiting capture loop...")
-                    break
+
+                if not args.headless:
+                    # Draw boxes
+                    for (x, y, w, h) in rects:
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 212, 255), 2)
+                        cv2.putText(frame, "HUMAN", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 212, 255), 2)
+
+                    status_txt = f"Room {args.room}: {'OCCUPIED' if occupied_state else 'EMPTY'} | Count: {human_count}"
+                    cv2.putText(frame, status_txt, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                                (0, 255, 0) if occupied_state else (0, 0, 255), 2)
+                    cv2.imshow(f"VisionGrid AI - Camera [{args.room}]", frame)
+
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        print("Exiting capture loop...")
+                        break
             else:
-                # Simulated frame logic (e.g. loops between mock detections)
-                # Toggle humans count periodically for prototype testing
                 cycle = int(time.time() / 15) % 2
-                human_count = 3 if cycle == 0 else 0
-                print(f"[SIMULATION] Mock Camera Processing: Found {human_count} occupants.")
-            
-            # ==================== STATE COOLDOWN MACHINE ====================
+                human_count = 2 if cycle == 0 else 0
+                print(f"[SIMULATION] Mock Camera Processing [{args.room}]: Found {human_count} occupants.")
+
+            # State cooldown machine
             if human_count > 0:
-                # Humans detected
-                empty_since = None  # Reset timer
+                empty_since = None
                 if not occupied_state:
-                    print(f"💡 occupancy detected! [{human_count} humans]. Pushing STATE = OCCUPIED to backend...")
+                    print(f"💡 Occupancy detected in Room {args.room}! [{human_count} humans]. Pushing STATE = OCCUPIED...")
                     occupied_state = True
-                    # Sync to FastAPI
                     try:
-                        resp = requests.post(API_ENDPOINT, json={"occupied": True}, timeout=2.0)
-                        print(f"Backend Sync Response: {resp.status_code} - {resp.json()}")
+                        resp = requests.post(args.endpoint, json={"occupied": True, "room_id": args.room, "people_count": human_count}, timeout=2.0)
+                        print(f"Backend Sync Response: {resp.status_code}")
                     except Exception as e:
                         print(f"[ERROR] Could not connect to FastAPI Backend: {e}")
             else:
-                # No humans detected
                 if occupied_state:
                     if empty_since is None:
                         empty_since = time.time()
-                        print(f"⚠️ Room is empty! Cooldown countdown initiated for {COOLDOWN_PERIOD} seconds...")
-                    
+                        print(f"⚠️ Room {args.room} is empty! Cooldown countdown initiated for {args.cooldown} seconds...")
+
                     elapsed = time.time() - empty_since
-                    print(f"Cooldown active: {elapsed:.1f}s / {COOLDOWN_PERIOD}s remaining...")
-                    
-                    if elapsed >= COOLDOWN_PERIOD:
-                        print(f"⏱️ Cooldown expired! Pushing STATE = EMPTY to backend...")
+                    print(f"Cooldown active: {elapsed:.1f}s / {args.cooldown}s remaining...")
+
+                    if elapsed >= args.cooldown:
+                        print(f"⏱️ Cooldown expired! Pushing STATE = EMPTY for Room {args.room}...")
                         occupied_state = False
                         empty_since = None
-                        # Sync to FastAPI
                         try:
-                            resp = requests.post(API_ENDPOINT, json={"occupied": False}, timeout=2.0)
-                            print(f"Backend Sync Response: {resp.status_code} - {resp.json()}")
+                            resp = requests.post(args.endpoint, json={"occupied": False, "room_id": args.room, "people_count": 0}, timeout=2.0)
+                            print(f"Backend Sync Response: {resp.status_code}")
                         except Exception as e:
                             print(f"[ERROR] Could not connect to FastAPI Backend: {e}")
-            
-            # Enforce sampling frequency
+
             elapsed_processing = time.time() - start_time
-            sleep_dur = max(0.1, FRAME_INTERVAL - elapsed_processing)
+            sleep_dur = max(0.1, args.interval - elapsed_processing)
             time.sleep(sleep_dur)
-            
+
     except KeyboardInterrupt:
         print("AI engine stopped by keyboard interrupt.")
     finally:
-        if camera_connected:
+        if camera_connected and cap is not None:
             cap.release()
             cv2.destroyAllWindows()
-            print("Webcam stream released.")
+            print("Camera stream released.")
         print("Engine offline.")
 
 if __name__ == "__main__":

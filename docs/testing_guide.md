@@ -97,36 +97,62 @@ Ensure Mosquitto is active on port 1883.
 ### Step 2: Start the FastAPI Backend
 Open a terminal in the `backend/` directory and run:
 ```bash
-python app.py
+python -m uvicorn app:app --host 0.0.0.0 --port 8000
+# Or using the configured virtual environment:
+..\.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
-*   *Validation*: You should see `INFO: Launched FastAPI server on port 8000...` and `INFO: Successfully connected to local MQTT Broker!`.
+*   *Validation*: You should see `INFO: VisionGrid Backend Server started successfully!` on port 8000.
+*   *Instant Web Access*: Open your browser to `http://localhost:8000/` to access the full VisionGrid AI campus console with live camera feeds, classroom automation, and the Add Camera dialog.
 
-### Step 3: Start the React Dashboard
+### Step 3: Accessing and Adding Live Cameras
+
+#### Option A: Adding Cameras via Web UI
+1. Navigate to `http://localhost:8000/` and open the **Console -> CCTV Stream** panel.
+2. Click the **+ Add Camera** button in the top action bar.
+3. Fill in:
+   - **Camera Display Name**: e.g., `Classroom A101 Webcam`
+   - **Target Classroom**: e.g., `Room A101` (or select custom)
+   - **Camera Source**: Select `Physical Webcam 0`, `Webcam 1`, `RTSP IP Camera`, or `Simulated AI Camera`
+   - **AI Overlay**: Check to enable real-time bounding box detection
+4. Click **Launch Live Stream**. The new camera feed appears instantly in the grid, begins AI human detection, and controls room power!
+
+#### Option B: Adding Cameras Programmatically via REST API
+Send a `POST` request to `/api/cameras`:
+```bash
+curl -X POST http://localhost:8000/api/cameras \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Classroom Front Cam",
+    "room_id": "A101",
+    "source": "0",
+    "ai_enabled": true
+  }'
+```
+
+#### Option C: Live MJPEG Streaming URL
+Embed any camera feed directly into any web page or VLC:
+- **Live Stream URL**: `http://localhost:8000/api/cameras/{camera_id}/stream`
+- **Instant Snapshot**: `http://localhost:8000/api/cameras/{camera_id}/snapshot`
+
+### Step 4: Start the React Dashboard (Optional)
+If running the Vite frontend separately:
 Open a terminal in the `frontend/` directory and run:
 ```bash
 npm run dev
 ```
 *   Open `http://localhost:3000` in your web browser.
-*   *Validation*: The dashboard header connection indicator should instantly show **Broker: ONLINE** as the WebSocket handshake completes.
-
-### Step 4: Launch the AI Detection Engine
-Open a terminal in the `ai-engine/` directory and run:
-```bash
-python detector.py
-```
-*   *Validation*: A window showing your live webcam feed should open. The terminal will log frame evaluations every 3 seconds.
+*   *Validation*: The dashboard header connection indicator should show **Broker: ONLINE** and stream the live cameras directly from the backend.
 
 ### Step 5: Test the Automation Trigger
 1.  **AI Detection (ON)**: Step in front of the webcam.
-    *   *AI Terminal*: Logs `occupancy detected! Pushing STATE = OCCUPIED to backend...`.
-    *   *FastAPI Terminal*: Logs status change, publishes command `ON` to topic `visiongrid/A101/power`, and broadcasts over Websockets.
-    *   *React Dashboard*: Card updates state to **Occupied: DETECTED** and power status to **ON**.
+    *   *AI HUD*: Shows neon cyan bounding boxes with label `HUMAN [98.4%]`, occupant count increments.
+    *   *Backend*: Detects occupancy, publishes command `ON` to topic `visiongrid/A101/power`, and broadcasts over WebSockets.
+    *   *Dashboard*: Room card updates state to **Occupied: DETECTED** and power status to **ON**.
     *   *ESP32 Node*: Board receives the MQTT `ON` command, switches GPIO 25 High, activating the relay, and turns the bulb **ON**.
 2.  **Cooldown Action (OFF)**: Step out of the webcam frame.
-    *   *AI Terminal*: Logs `Room is empty! Cooldown countdown initiated...`.
-    *   *AI Terminal (10s later)*: Logs `Cooldown expired! Pushing STATE = EMPTY to backend...`.
-    *   *FastAPI Terminal*: Publishes `OFF` to `visiongrid/A101/power`.
-    *   *React Dashboard*: Syncs state changes.
+    *   *Backend*: Initiates 10-second empty room countdown.
+    *   *After 10s*: Cooldown expires, publishes `OFF` to `visiongrid/A101/power`.
+    *   *Dashboard*: Room switches to **EMPTY**, power transitions to **OFF**.
     *   *ESP32 Node*: Receives `OFF`, drives GPIO 25 Low, switching the relay, turning the bulb **OFF**.
 
 ---

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "cam_a101",
+    "name": "Room A101 Main CCTV",
+    "room_id": "A101",
+    "source": "0",
+    "description": "Classroom A101 primary physical webcam stream",
+    "ai_overlay_enabled": false
+  },
+  {
+    "id": "cam_a102",
+    "name": "Room A102 Lecture Hall",
+    "room_id": "A102",
+    "source": "simulation",
+    "description": "Lecture Hall A102 simulated wide-angle surveillance stream",
+    "ai_overlay_enabled": true
+  },
+  {
+    "id": "cam_333_946",
+    "name": "333",
+    "room_id": "A102",
+    "source": "1",
+    "description": "",
+    "ai_overlay_enabled": false
+  },
+  {
+    "id": "cam_44_534",
+    "name": "44",
+    "room_id": "A101",
+    "source": "1",
+    "description": "",
+    "ai_overlay_enabled": true
+  },
+  {
+    "id": "cam_222_571",
+    "name": "222",
+    "room_id": "A101",
+    "source": "1",
+    "description": "",
+    "ai_overlay_enabled": true
+  }
+]

@@ -358,11 +358,16 @@ function manualRelayToggle(roomId, relayType) {
   
   if (relayType === 'lights') {
     room.lightsOn = !room.lightsOn;
-    pushActivityLog(`10:45:00 Manual lights override triggered in room ${roomId}. Relay 1 set to ${room.lightsOn ? 'ON' : 'OFF'}`);
+    pushActivityLog(`Manual lights override triggered in room ${roomId}. Relay 1 set to ${room.lightsOn ? 'ON' : 'OFF'}`);
   } else if (relayType === 'fans') {
     room.fansOn = !room.fansOn;
-    pushActivityLog(`10:45:00 Manual fans override triggered in room ${roomId}. Relay 2 set to ${room.fansOn ? 'ON' : 'OFF'}`);
+    pushActivityLog(`Manual fans override triggered in room ${roomId}. Relay 2 set to ${room.fansOn ? 'ON' : 'OFF'}`);
   }
+
+  // Dispatch to backend API
+  fetch(`/api/rooms/${roomId}/toggle`, { method: 'POST' }).catch(err => {
+    console.warn('Backend toggle API offline, running locally:', err);
+  });
   
   // Re-render UI elements
   renderClassrooms();
@@ -963,53 +968,176 @@ function simulateTelemetryFlicker() {
   }, 500);
 }
 
-// ==================== SURVEILLANCE CCTV CANVAS GRAPHICS ====================
+// ==================== SURVEILLANCE CCTV REAL-TIME & LIVE VIDEO ENGINE ====================
+let backendCameras = [];
+let backendWs = null;
+
+function initBackendWebSocket() {
+  if (backendWs && backendWs.readyState === WebSocket.OPEN) return;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host || 'localhost:8000';
+  const wsUrl = `${protocol}//${host}/ws`;
+  
+  try {
+    backendWs = new WebSocket(wsUrl);
+    backendWs.onopen = () => {
+      console.log('Connected to VisionGrid Backend WebSocket!');
+      pushActivityLog('Connected to Central Backend WebSocket pipeline.');
+    };
+    backendWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleBackendBroadcast(data);
+      } catch(e) { }
+    };
+    backendWs.onclose = () => {
+      setTimeout(initBackendWebSocket, 4000);
+    };
+  } catch(e) {
+    console.warn('Backend WebSocket could not connect:', e);
+  }
+}
+
+function handleBackendBroadcast(data) {
+  if (data.type === 'init') {
+    if (data.rooms && Array.isArray(data.rooms)) {
+      data.rooms.forEach(br => {
+        const existing = state.classrooms.find(r => r.id === br.room_id);
+        if (existing) {
+          existing.status = br.occupied ? 'occupied' : 'empty';
+          existing.peopleCount = br.people_count;
+          existing.lightsOn = br.lights_on;
+          existing.fansOn = br.fans_on;
+          if (br.esp32_status) existing.signal = br.signal || 85;
+        }
+      });
+      renderClassrooms();
+      syncStateDevices();
+      renderDevicesList();
+    }
+    if (data.cameras) {
+      backendCameras = data.cameras;
+      renderLiveCameraCards();
+    }
+  } else if (data.type === 'room_update') {
+    const br = data.room || data;
+    const roomId = br.room_id || data.room_id;
+    const existing = state.classrooms.find(r => r.id === roomId);
+    if (existing) {
+      existing.status = br.occupied ? 'occupied' : 'empty';
+      existing.peopleCount = br.people_count !== undefined ? br.people_count : (br.occupied ? 1 : 0);
+      existing.lightsOn = br.power_status === 'ON' || br.lights_on;
+      existing.fansOn = br.power_status === 'ON' || br.fans_on;
+      if (br.esp32_status) existing.status = (br.esp32_status === 'Connected' ? (br.occupied ? 'occupied' : 'empty') : 'offline');
+      renderClassrooms();
+      syncStateDevices();
+      renderDevicesList();
+    }
+    // Also update any camera card for this room
+    if (backendCameras.length > 0) {
+      backendCameras.forEach(c => {
+        if (c.room_id === roomId) {
+          c.occupied = br.occupied;
+          if (br.people_count !== undefined) c.occupant_count = br.people_count;
+        }
+      });
+      renderLiveCameraCards();
+    }
+  } else if (data.type === 'camera_added' || data.type === 'camera_removed') {
+    fetchLiveCameras();
+  }
+}
+
+async function fetchLiveCameras() {
+  try {
+    const res = await fetch('/api/cameras');
+    if (res.ok) {
+      const data = await res.json();
+      backendCameras = data.cameras || [];
+      renderLiveCameraCards();
+      return;
+    }
+  } catch(e) {
+    console.warn('Backend API /api/cameras unreachable, using canvas simulation:', e);
+  }
+  renderFallbackCanvasStreams();
+}
+
 function initCCTVCanvasStreams() {
+  initBackendWebSocket();
+  fetchLiveCameras();
+}
+
+function renderLiveCameraCards() {
   const container = document.getElementById('cctv-grid-container');
   if (!container) return;
   
+  if (!backendCameras || backendCameras.length === 0) {
+    renderFallbackCanvasStreams();
+    return;
+  }
+  
+  container.innerHTML = '';
+  backendCameras.forEach(cam => {
+    const card = document.createElement('div');
+    card.className = 'glass-card camera-card';
+    
+    card.innerHTML = `
+      <div class="camera-feed-container" id="feed-${cam.id}">
+        <img src="/api/cameras/${cam.id}/stream" class="camera-stream-img" alt="${cam.name}" 
+             onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<div class=\\'camera-offline-msg\\'><i class=\\'fa-solid fa-triangle-exclamation\\'></i><span>FEED RECONNECTING</span></div>';" />
+        <div class="camera-meta">
+          <span class="cam-name-badge">${cam.name} [${cam.room_id}]</span>
+          <span class="badge ${cam.occupied ? 'badge-online' : 'badge-offline'}">${cam.occupied ? 'OCCUPIED' : 'EMPTY'}</span>
+        </div>
+        <div class="camera-controls">
+          <button class="cam-ctrl-btn" onclick="takeCameraSnapshot('${cam.id}')" title="Snapshot Frame"><i class="fa-solid fa-camera"></i></button>
+          <button class="cam-ctrl-btn" onclick="toggleCameraAI('${cam.id}')" title="Toggle AI Bounding Box HUD"><i class="fa-solid fa-brain"></i></button>
+          <button class="cam-ctrl-btn danger-hover" onclick="deleteCameraLive('${cam.id}')" title="Delete Camera Stream"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+      <div class="camera-footer">
+        <div class="cam-stats">
+          <div class="cam-stat-item">
+            <span class="cam-stat-label">Detects:</span>
+            <span class="cam-stat-val" id="cam-stat-peop-${cam.id}">${cam.occupant_count}</span>
+          </div>
+          <div class="cam-stat-item">
+            <span class="cam-stat-label">FPS / Source:</span>
+            <span class="cam-stat-val" style="color:var(--primary-accent);">${cam.fps} fps (${cam.is_simulation ? 'Sim' : cam.source})</span>
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-ghost" style="padding:4px 12px; font-size:0.8rem;" onclick="expandLiveCameraFullScreen('${cam.id}', '${cam.name}')">Expand Feed</button>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function renderFallbackCanvasStreams() {
+  const container = document.getElementById('cctv-grid-container');
+  if (!container) return;
   container.innerHTML = '';
   
   state.classrooms.forEach(room => {
     const card = document.createElement('div');
     card.className = 'glass-card camera-card';
-    
-    // Header information
     const isOffline = room.status === 'offline';
     
-    let innerContent = '';
-    if (isOffline) {
-      innerContent = `
-        <div class="camera-feed-container">
-          <div class="camera-offline-msg">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <span>STREAM OFFLINE</span>
-          </div>
-          <div class="camera-meta">
-            <span class="cam-name-badge">${room.name} — CCTV CAM</span>
-            <span class="badge badge-danger">Offline</span>
-          </div>
-        </div>
-      `;
-    } else {
-      innerContent = `
-        <div class="camera-feed-container" id="feed-${room.id}">
-          <canvas class="camera-canvas" id="canvas-${room.id}" width="640" height="360"></canvas>
-          <div class="camera-meta">
-            <span class="cam-name-badge">${room.name} — CCTV CAM</span>
-            <span class="badge ${room.status === 'occupied' ? 'badge-online' : 'badge-offline'}">${room.status}</span>
-          </div>
-          <div class="camera-controls">
-            <button class="cam-ctrl-btn" onclick="alert('Pan Tilt Zoom adjustments unlocked for premium campuses.')" title="PTZ Controls"><i class="fa-solid fa-arrows-to-eye"></i></button>
-            <button class="cam-ctrl-btn" onclick="alert('Camera screenshot captured.')" title="Snapshot"><i class="fa-solid fa-camera"></i></button>
-            <button class="cam-ctrl-btn" onclick="toggleAISingle('${room.id}')" title="Toggle AI Core Overlay"><i class="fa-solid fa-brain"></i></button>
-          </div>
-        </div>
-      `;
-    }
-    
     card.innerHTML = `
-      ${innerContent}
+      <div class="camera-feed-container" id="feed-${room.id}">
+        <canvas class="camera-canvas" id="canvas-${room.id}" width="640" height="360"></canvas>
+        <div class="camera-meta">
+          <span class="cam-name-badge">${room.name} — CCTV CAM</span>
+          <span class="badge ${room.status === 'occupied' ? 'badge-online' : 'badge-offline'}">${room.status}</span>
+        </div>
+        <div class="camera-controls">
+          <button class="cam-ctrl-btn" onclick="alert('Snapshot taken.')" title="Snapshot"><i class="fa-solid fa-camera"></i></button>
+          <button class="cam-ctrl-btn" onclick="toggleAISingle('${room.id}')" title="Toggle AI Core Overlay"><i class="fa-solid fa-brain"></i></button>
+        </div>
+      </div>
       <div class="camera-footer">
         <div class="cam-stats">
           <div class="cam-stat-item">
@@ -1026,10 +1154,8 @@ function initCCTVCanvasStreams() {
         </div>
       </div>
     `;
-    
     container.appendChild(card);
     
-    // Store canvas references
     if (!isOffline) {
       setTimeout(() => {
         const canvas = document.getElementById(`canvas-${room.id}`);
@@ -1402,3 +1528,114 @@ function handleAddDeviceSubmit(e) {
   renderClassrooms();
   renderDevicesList();
 }
+
+// ==================== LIVE CAMERA ADD & MANAGE MODALS ====================
+function openAddCameraModal() {
+  const modal = document.getElementById('add-camera-modal');
+  if (!modal) return;
+  document.getElementById('cam-add-name').value = '';
+  document.getElementById('cam-add-source').value = '0';
+  document.getElementById('cam-add-type').value = '0';
+  document.getElementById('cam-add-desc').value = '';
+  const customGroup = document.getElementById('custom-room-group');
+  if (customGroup) customGroup.style.display = 'none';
+  modal.classList.add('active');
+}
+
+function closeAddCameraModal() {
+  const modal = document.getElementById('add-camera-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function handleCameraTypeChange(val) {
+  const sourceInput = document.getElementById('cam-add-source');
+  if (!sourceInput) return;
+  if (val === '0') sourceInput.value = '0';
+  else if (val === '1') sourceInput.value = '1';
+  else if (val === 'rtsp') sourceInput.value = 'rtsp://admin:password@192.168.1.100:554/stream1';
+  else if (val === 'http') sourceInput.value = 'http://192.168.1.100:8080/video';
+  else if (val === 'simulation') sourceInput.value = 'simulation';
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'cam-add-room') {
+    const customGroup = document.getElementById('custom-room-group');
+    if (customGroup) {
+      customGroup.style.display = e.target.value === 'CUSTOM' ? 'block' : 'none';
+    }
+  }
+});
+
+async function handleAddCameraSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('cam-add-name').value.trim();
+  let room = document.getElementById('cam-add-room').value;
+  if (room === 'CUSTOM') {
+    const customInput = document.getElementById('cam-add-custom-room');
+    room = (customInput && customInput.value.trim().toUpperCase()) || 'NEW101';
+  }
+  const source = document.getElementById('cam-add-source').value.trim();
+  const desc = document.getElementById('cam-add-desc').value.trim();
+  const aiEnabled = document.getElementById('cam-add-ai').checked;
+
+  try {
+    const res = await fetch('/api/cameras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        room_id: room,
+        source: source,
+        description: desc,
+        ai_enabled: aiEnabled
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      pushActivityLog(`Live camera '${name}' added for Room ${room} (Source: ${source})`);
+      closeAddCameraModal();
+      await fetchLiveCameras();
+      alert(`Success! Camera "${name}" connected and live streaming active for Room ${room}.`);
+    } else {
+      const err = await res.json();
+      alert(`Error connecting camera: ${err.detail || 'Server rejected request'}`);
+    }
+  } catch(err) {
+    alert(`Could not connect to backend API: ${err.message}`);
+  }
+}
+
+async function deleteCameraLive(camId) {
+  if (!confirm(`Are you sure you want to stop and delete camera '${camId}'?`)) return;
+  try {
+    const res = await fetch(`/api/cameras/${camId}`, { method: 'DELETE' });
+    if (res.ok) {
+      pushActivityLog(`Camera '${camId}' removed from surveillance mesh.`);
+      await fetchLiveCameras();
+    }
+  } catch(e) {
+    alert('Error deleting camera: ' + e.message);
+  }
+}
+
+async function toggleCameraAI(camId) {
+  try {
+    const res = await fetch(`/api/cameras/${camId}/toggle-ai`, { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      pushActivityLog(`AI HUD overlay on camera '${camId}' set to ${data.ai_overlay_enabled ? 'ON' : 'OFF'}`);
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function takeCameraSnapshot(camId) {
+  window.open(`/api/cameras/${camId}/snapshot`, '_blank');
+}
+
+function expandLiveCameraFullScreen(camId, camName) {
+  window.open(`/api/cameras/${camId}/stream`, '_blank', 'width=800,height=500');
+}
+

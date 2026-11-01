@@ -2339,3 +2339,145 @@ h3 {
   animation: pulse 1.2s infinite ease-in-out;
 }
 
+/* Multi-Type Live Camera Feeds & Video Elements */
+.camera-stream-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.camera-feed-canvas-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Camera Source Category Selector Grid */
+.cam-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cam-type-btn {
+  background: rgba(22, 27, 34, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 8px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  text-align: center;
+}
+
+.cam-type-btn:hover {
+  background: rgba(0, 212, 255, 0.08);
+  border-color: rgba(0, 212, 255, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.cam-type-btn.active {
+  background: rgba(0, 212, 255, 0.15);
+  border-color: var(--primary-accent);
+  color: var(--primary-accent);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+}
+
+.cam-type-btn i {
+  font-size: 1.15rem;
+}
+
+/* Quick Brand Preset Pills */
+.preset-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.preset-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.preset-pill:hover {
+  background: rgba(0, 212, 255, 0.15);
+  border-color: var(--primary-accent);
+  color: #fff;
+}
+
+/* Live Camera Modal Preview */
+.cam-preview-box {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #050508;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.cam-preview-box video,
+.cam-preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Backend Status Pill */
+.backend-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(13, 17, 23, 0.8);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.backend-status-pill:hover {
+  border-color: var(--primary-accent);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.backend-status-pill.online {
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+
+.backend-status-pill.standalone {
+  border-color: rgba(0, 212, 255, 0.4);
+  color: var(--primary-accent);
+}
+

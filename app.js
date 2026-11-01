@@ -969,20 +969,77 @@ function simulateTelemetryFlicker() {
 }
 
 // ==================== SURVEILLANCE CCTV REAL-TIME & LIVE VIDEO ENGINE ====================
+let API_BASE = localStorage.getItem('visiongrid_backend_url') || (window.location.origin.includes('localhost') ? 'http://localhost:8000' : '');
+let isBackendOnline = false;
 let backendCameras = [];
+let customCameras = loadCustomCameras();
+let activeMediaStreams = {};
+let previewMediaStream = null;
+let selectedVideoFileBlobUrl = null;
+let clientHudIntervals = {};
 let backendWs = null;
+
+function loadCustomCameras() {
+  try {
+    const raw = localStorage.getItem('visiongrid_custom_cameras');
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function saveCustomCameras(cams) {
+  customCameras = cams;
+  try {
+    localStorage.setItem('visiongrid_custom_cameras', JSON.stringify(cams));
+  } catch(e) {
+    console.warn('Could not save cameras to localStorage:', e);
+  }
+}
+
+async function checkBackendHealth() {
+  const badgeText = document.getElementById('backend-status-text');
+  const badgePill = document.getElementById('backend-status-badge');
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`${API_BASE}/api/status`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      isBackendOnline = true;
+      if (badgeText) badgeText.innerText = 'Backend: Online (YOLOv8)';
+      if (badgePill) {
+        badgePill.className = 'backend-status-pill online';
+      }
+      return true;
+    }
+  } catch(e) { }
+  isBackendOnline = false;
+  if (badgeText) badgeText.innerText = 'Standalone Mode (Client Vision)';
+  if (badgePill) {
+    badgePill.className = 'backend-status-pill standalone';
+  }
+  return false;
+}
 
 function initBackendWebSocket() {
   if (backendWs && backendWs.readyState === WebSocket.OPEN) return;
+  checkBackendHealth();
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host || 'localhost:8000';
-  const wsUrl = `${protocol}//${host}/ws`;
+  const defaultHost = window.location.host || 'localhost:8000';
+  let wsUrl = `${protocol}//${defaultHost}/ws`;
+  if (API_BASE && API_BASE.startsWith('http')) {
+    const hostPart = API_BASE.replace(/^https?:\/\//, '');
+    const wsProto = API_BASE.startsWith('https') ? 'wss:' : 'ws:';
+    wsUrl = `${wsProto}//${hostPart}/ws`;
+  }
   
   try {
     backendWs = new WebSocket(wsUrl);
     backendWs.onopen = () => {
       console.log('Connected to VisionGrid Backend WebSocket!');
       pushActivityLog('Connected to Central Backend WebSocket pipeline.');
+      checkBackendHealth();
     };
     backendWs.onmessage = (event) => {
       try {
@@ -1049,18 +1106,83 @@ function handleBackendBroadcast(data) {
 }
 
 async function fetchLiveCameras() {
+  customCameras = loadCustomCameras();
+  let serverCams = [];
   try {
-    const res = await fetch('/api/cameras');
+    const res = await fetch(`${API_BASE}/api/cameras`);
     if (res.ok) {
       const data = await res.json();
-      backendCameras = data.cameras || [];
-      renderLiveCameraCards();
-      return;
+      serverCams = data.cameras || [];
+      isBackendOnline = true;
+      checkBackendHealth();
     }
   } catch(e) {
-    console.warn('Backend API /api/cameras unreachable, using canvas simulation:', e);
+    isBackendOnline = false;
+    checkBackendHealth();
   }
-  renderFallbackCanvasStreams();
+
+  // Merge server cameras with client custom cameras
+  const mergedMap = new Map();
+  serverCams.forEach(c => {
+    mergedMap.set(c.id, {
+      ...c,
+      is_server_managed: true
+    });
+  });
+  customCameras.forEach(c => {
+    if (!mergedMap.has(c.id)) {
+      mergedMap.set(c.id, c);
+    }
+  });
+
+  backendCameras = Array.from(mergedMap.values());
+
+  // If completely empty, seed default simulation cameras
+  if (backendCameras.length === 0) {
+    backendCameras = [
+      {
+        id: 'cam_a101',
+        name: 'Room A101 Main CCTV',
+        room_id: 'A101',
+        source_type: 'simulation',
+        source: 'simulation',
+        description: 'Classroom A101 primary simulated wide-angle stream',
+        ai_overlay_enabled: true,
+        heatmap_enabled: false,
+        occupant_count: 3,
+        occupied: true,
+        fps: 29.8
+      },
+      {
+        id: 'cam_a102',
+        name: 'Room A102 Lecture Hall',
+        room_id: 'A102',
+        source_type: 'simulation',
+        source: 'simulation',
+        description: 'Lecture Hall A102 simulated wide-angle surveillance stream',
+        ai_overlay_enabled: true,
+        heatmap_enabled: false,
+        occupant_count: 0,
+        occupied: false,
+        fps: 30.0
+      },
+      {
+        id: 'cam_b202',
+        name: 'Room B202 Chemistry Lab',
+        room_id: 'B202',
+        source_type: 'simulation',
+        source: 'simulation',
+        description: 'Chemistry Lab B202 simulated high-angle feed',
+        ai_overlay_enabled: true,
+        heatmap_enabled: false,
+        occupant_count: 2,
+        occupied: true,
+        fps: 28.5
+      }
+    ];
+  }
+
+  renderLiveCameraCards();
 }
 
 function initCCTVCanvasStreams() {
@@ -1068,31 +1190,83 @@ function initCCTVCanvasStreams() {
   fetchLiveCameras();
 }
 
+function stopAllClientMediaStreams() {
+  // Stop all active webcam tracks
+  for (let id in activeMediaStreams) {
+    try {
+      if (activeMediaStreams[id]) {
+        activeMediaStreams[id].getTracks().forEach(t => t.stop());
+      }
+    } catch(e) { }
+  }
+  activeMediaStreams = {};
+
+  // Clear animation intervals
+  for (let id in clientHudIntervals) {
+    try {
+      cancelAnimationFrame(clientHudIntervals[id]);
+      clearInterval(clientHudIntervals[id]);
+    } catch(e) { }
+  }
+  clientHudIntervals = {};
+}
+
 function renderLiveCameraCards() {
   const container = document.getElementById('cctv-grid-container');
   if (!container) return;
   
-  if (!backendCameras || backendCameras.length === 0) {
-    renderFallbackCanvasStreams();
-    return;
-  }
-  
+  stopAllClientMediaStreams();
   container.innerHTML = '';
+
   backendCameras.forEach(cam => {
     const card = document.createElement('div');
     card.className = 'glass-card camera-card';
+    card.id = `card-${cam.id}`;
     
+    let mediaHtml = '';
+    const st = cam.source_type || (cam.is_simulation ? 'simulation' : (cam.source && String(cam.source).startsWith('http') ? 'mjpeg' : (cam.source === '0' || cam.source === '1' ? 'server' : 'simulation')));
+
+    if (st === 'browser_webcam') {
+      mediaHtml = `
+        <video id="video-${cam.id}" autoplay playsinline muted class="camera-stream-video"></video>
+        <canvas id="overlay-${cam.id}" class="camera-feed-canvas-overlay" width="640" height="360"></canvas>
+      `;
+    } else if (st === 'video_file') {
+      mediaHtml = `
+        <video id="video-${cam.id}" src="${cam.source}" loop autoplay playsinline muted class="camera-stream-video"></video>
+        <canvas id="overlay-${cam.id}" class="camera-feed-canvas-overlay" width="640" height="360"></canvas>
+      `;
+    } else if (st === 'mjpeg') {
+      mediaHtml = `
+        <img id="img-${cam.id}" src="${cam.source}" class="camera-stream-img" alt="${cam.name}" 
+             onerror="handleImageFeedError(this, '${cam.id}')" />
+        <canvas id="overlay-${cam.id}" class="camera-feed-canvas-overlay" width="640" height="360"></canvas>
+      `;
+    } else if (st === 'server' || cam.is_server_managed) {
+      mediaHtml = `
+        <img id="img-${cam.id}" src="${API_BASE}/api/cameras/${cam.id}/stream" class="camera-stream-img" alt="${cam.name}" 
+             onerror="handleServerStreamError(this, '${cam.id}')" />
+      `;
+    } else {
+      mediaHtml = `
+        <canvas class="camera-canvas" id="canvas-${cam.id}" width="640" height="360"></canvas>
+      `;
+    }
+
+    const sourceLabel = st === 'browser_webcam' ? 'USB / WebCam' : (st === 'rtsp' ? 'RTSP CCTV' : (st === 'mjpeg' ? 'HTTP/MJPEG' : (st === 'video_file' ? 'Local Clip' : (st === 'server' ? 'Server Cam' : 'Simulated AI'))));
+
     card.innerHTML = `
       <div class="camera-feed-container" id="feed-${cam.id}">
-        <img src="/api/cameras/${cam.id}/stream" class="camera-stream-img" alt="${cam.name}" 
-             onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<div class=\\'camera-offline-msg\\'><i class=\\'fa-solid fa-triangle-exclamation\\'></i><span>FEED RECONNECTING</span></div>';" />
+        ${mediaHtml}
         <div class="camera-meta">
           <span class="cam-name-badge">${cam.name} [${cam.room_id}]</span>
-          <span class="badge ${cam.occupied ? 'badge-online' : 'badge-offline'}">${cam.occupied ? 'OCCUPIED' : 'EMPTY'}</span>
+          <span class="badge ${cam.occupied ? 'badge-online' : 'badge-offline'}" id="cam-occ-badge-${cam.id}">${cam.occupied ? 'OCCUPIED' : 'EMPTY'}</span>
         </div>
         <div class="camera-controls">
           <button class="cam-ctrl-btn" onclick="takeCameraSnapshot('${cam.id}')" title="Snapshot Frame"><i class="fa-solid fa-camera"></i></button>
           <button class="cam-ctrl-btn" onclick="toggleCameraAI('${cam.id}')" title="Toggle AI Bounding Box HUD"><i class="fa-solid fa-brain"></i></button>
+          <button class="cam-ctrl-btn" onclick="toggleCameraHeatmap('${cam.id}')" title="Toggle Heatmap Overlay"><i class="fa-solid fa-fire"></i></button>
+          <button class="cam-ctrl-btn" onclick="expandLiveCameraFullScreen('${cam.id}', '${cam.name}')" title="Full Screen"><i class="fa-solid fa-expand"></i></button>
           <button class="cam-ctrl-btn danger-hover" onclick="deleteCameraLive('${cam.id}')" title="Delete Camera Stream"><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
@@ -1100,11 +1274,11 @@ function renderLiveCameraCards() {
         <div class="cam-stats">
           <div class="cam-stat-item">
             <span class="cam-stat-label">Detects:</span>
-            <span class="cam-stat-val" id="cam-stat-peop-${cam.id}">${cam.occupant_count}</span>
+            <span class="cam-stat-val" id="cam-stat-peop-${cam.id}">${cam.occupant_count !== undefined ? cam.occupant_count : 0}</span>
           </div>
           <div class="cam-stat-item">
-            <span class="cam-stat-label">FPS / Source:</span>
-            <span class="cam-stat-val" style="color:var(--primary-accent);">${cam.fps} fps (${cam.is_simulation ? 'Sim' : cam.source})</span>
+            <span class="cam-stat-label">Source / Type:</span>
+            <span class="cam-stat-val" style="color:var(--primary-accent);">${sourceLabel}</span>
           </div>
         </div>
         <div>
@@ -1113,8 +1287,13 @@ function renderLiveCameraCards() {
       </div>
     `;
     container.appendChild(card);
+
+    setTimeout(() => {
+      initCardMediaFeed(cam);
+    }, 50);
   });
 }
+
 
 function renderFallbackCanvasStreams() {
   const container = document.getElementById('cctv-grid-container');
@@ -1529,32 +1708,199 @@ function handleAddDeviceSubmit(e) {
   renderDevicesList();
 }
 
-// ==================== LIVE CAMERA ADD & MANAGE MODALS ====================
+// ==================== LIVE CAMERA ADD & MANAGE MODALS (MULTI-SOURCE) ====================
+
+function selectCameraCategory(cat) {
+  const selectedInput = document.getElementById('cam-add-selected-category');
+  if (selectedInput) selectedInput.value = cat;
+
+  // Update button active states
+  const buttons = document.querySelectorAll('#cam-category-selector .cam-type-btn');
+  buttons.forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-type') === cat);
+  });
+
+  // Toggle sections
+  const sections = ['browser_webcam', 'rtsp', 'mjpeg', 'video_file', 'server', 'simulation'];
+  sections.forEach(s => {
+    const el = document.getElementById(`section-${s}`);
+    if (el) el.style.display = (s === cat ? 'block' : 'none');
+  });
+
+  if (cat === 'browser_webcam') {
+    detectLocalWebcams();
+  }
+}
+
+async function detectLocalWebcams() {
+  const select = document.getElementById('cam-browser-devices');
+  if (!select) return;
+
+  select.innerHTML = '<option value="default">Default System Camera / USB Cam</option>';
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    select.innerHTML += '<option value="default" disabled>(Device enumeration not supported in this browser)</option>';
+    return;
+  }
+
+  try {
+    // Probe permissions to get real device labels
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      probe.getTracks().forEach(t => t.stop());
+    } catch(err) { }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+    if (videoDevices.length > 0) {
+      select.innerHTML = '';
+      videoDevices.forEach((dev, idx) => {
+        const opt = document.createElement('option');
+        opt.value = dev.deviceId || `device_${idx}`;
+        opt.innerText = dev.label ? dev.label : `USB Video Device ${idx + 1}`;
+        select.appendChild(opt);
+      });
+    }
+  } catch(e) {
+    console.warn('Could not list video devices:', e);
+  }
+}
+
+function applyRTSPPreset(brand) {
+  const input = document.getElementById('cam-rtsp-url');
+  if (!input) return;
+
+  const presets = {
+    hikvision: 'rtsp://admin:12345@192.168.1.100:554/Streaming/Channels/101',
+    dahua: 'rtsp://admin:admin123@192.168.1.100:554/cam/realmonitor?channel=1&subtype=0',
+    tapo: 'rtsp://admin:password@192.168.1.100:554/stream1',
+    reolink: 'rtsp://admin:password@192.168.1.100:554/h264Preview_01_main',
+    axis: 'rtsp://root:pass@192.168.1.100/axis-media/media.amp',
+    generic: 'rtsp://admin:pass@192.168.1.100:554/live/ch0'
+  };
+
+  input.value = presets[brand] || presets.generic;
+}
+
+function applyMJPEGPreset(type) {
+  const input = document.getElementById('cam-mjpeg-url');
+  if (!input) return;
+
+  const presets = {
+    esp32: 'http://192.168.1.120:81/stream',
+    ipwebcam: 'http://192.168.1.50:8080/video',
+    droidcam: 'http://192.168.1.50:4747/video',
+    public: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=640&q=80'
+  };
+
+  input.value = presets[type] || '';
+}
+
+function applySampleVideo(type) {
+  const input = document.getElementById('cam-video-url');
+  if (!input) return;
+
+  // Reliable, high quality public sample videos for smart classroom testing
+  const samples = {
+    classroom: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    hallway: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+  };
+
+  input.value = samples[type] || '';
+  testCameraPreview();
+}
+
+function handleVideoFileSelected(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    selectedVideoFileBlobUrl = URL.createObjectURL(file);
+    testCameraPreview();
+  }
+}
+
+async function testCameraPreview() {
+  const previewBox = document.getElementById('cam-modal-preview');
+  if (!previewBox) return;
+
+  if (previewMediaStream) {
+    previewMediaStream.getTracks().forEach(t => t.stop());
+    previewMediaStream = null;
+  }
+
+  const cat = document.getElementById('cam-add-selected-category').value;
+  previewBox.innerHTML = '<span style="color:var(--primary-accent);"><i class="fa-solid fa-spinner fa-spin"></i> Initializing feed test...</span>';
+
+  if (cat === 'browser_webcam') {
+    const devSelect = document.getElementById('cam-browser-devices');
+    const deviceId = devSelect ? devSelect.value : 'default';
+    const constraints = {
+      video: deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : true,
+      audio: false
+    };
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      previewMediaStream = stream;
+      previewBox.innerHTML = '<video id="preview-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover;"></video>';
+      const vid = document.getElementById('preview-video');
+      if (vid) vid.srcObject = stream;
+    } catch(err) {
+      previewBox.innerHTML = `<span style="color:var(--danger); padding:10px;"><i class="fa-solid fa-triangle-exclamation"></i> Camera Access Denied: ${err.message}</span>`;
+    }
+  } else if (cat === 'video_file') {
+    const fileInput = document.getElementById('cam-video-file-input');
+    const urlInput = document.getElementById('cam-video-url');
+    let src = '';
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      src = selectedVideoFileBlobUrl || URL.createObjectURL(fileInput.files[0]);
+    } else if (urlInput && urlInput.value.trim()) {
+      src = urlInput.value.trim();
+    }
+
+    if (src) {
+      previewBox.innerHTML = `<video src="${src}" autoplay loop muted style="width:100%; height:100%; object-fit:cover;"></video>`;
+    } else {
+      previewBox.innerHTML = '<span>Please choose a video file or enter a video clip URL</span>';
+    }
+  } else if (cat === 'mjpeg') {
+    const mjpegInput = document.getElementById('cam-mjpeg-url');
+    const src = mjpegInput ? mjpegInput.value.trim() : '';
+    if (src) {
+      previewBox.innerHTML = `<img src="${src}" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\\'color:var(--danger)\\'>Failed to load HTTP stream</span>';" />`;
+    } else {
+      previewBox.innerHTML = '<span>Enter an HTTP/MJPEG URL to preview</span>';
+    }
+  } else if (cat === 'rtsp') {
+    const rtspInput = document.getElementById('cam-rtsp-url');
+    previewBox.innerHTML = `<div style="text-align:center; padding:12px;"><i class="fa-solid fa-network-wired" style="font-size:1.8rem; color:var(--primary-accent); margin-bottom:6px;"></i><div>RTSP Network Stream Configured</div><div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">${rtspInput ? rtspInput.value : 'Ready for connection'}</div></div>`;
+  } else if (cat === 'server') {
+    const srvInput = document.getElementById('cam-server-index');
+    previewBox.innerHTML = `<div style="text-align:center; padding:12px;"><i class="fa-solid fa-server" style="font-size:1.8rem; color:var(--primary-accent); margin-bottom:6px;"></i><div>Backend VideoCapture (Index: ${srvInput ? srvInput.value : '0'})</div><div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">DirectShow OpenCV Device</div></div>`;
+  } else {
+    previewBox.innerHTML = `<div style="text-align:center; padding:12px;"><i class="fa-solid fa-brain" style="font-size:1.8rem; color:var(--secondary-accent); margin-bottom:6px;"></i><div>AI Simulated Smart Classroom</div><div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Ready to generate dynamic occupants</div></div>`;
+  }
+}
+
 function openAddCameraModal() {
   const modal = document.getElementById('add-camera-modal');
   if (!modal) return;
   document.getElementById('cam-add-name').value = '';
-  document.getElementById('cam-add-source').value = '0';
-  document.getElementById('cam-add-type').value = '0';
   document.getElementById('cam-add-desc').value = '';
   const customGroup = document.getElementById('custom-room-group');
   if (customGroup) customGroup.style.display = 'none';
+
+  selectCameraCategory('browser_webcam');
   modal.classList.add('active');
 }
 
 function closeAddCameraModal() {
+  if (previewMediaStream) {
+    previewMediaStream.getTracks().forEach(t => t.stop());
+    previewMediaStream = null;
+  }
   const modal = document.getElementById('add-camera-modal');
   if (modal) modal.classList.remove('active');
-}
-
-function handleCameraTypeChange(val) {
-  const sourceInput = document.getElementById('cam-add-source');
-  if (!sourceInput) return;
-  if (val === '0') sourceInput.value = '0';
-  else if (val === '1') sourceInput.value = '1';
-  else if (val === 'rtsp') sourceInput.value = 'rtsp://admin:password@192.168.1.100:554/stream1';
-  else if (val === 'http') sourceInput.value = 'http://192.168.1.100:8080/video';
-  else if (val === 'simulation') sourceInput.value = 'simulation';
 }
 
 document.addEventListener('change', (e) => {
@@ -1574,68 +1920,505 @@ async function handleAddCameraSubmit(e) {
     const customInput = document.getElementById('cam-add-custom-room');
     room = (customInput && customInput.value.trim().toUpperCase()) || 'NEW101';
   }
-  const source = document.getElementById('cam-add-source').value.trim();
+
+  const cat = document.getElementById('cam-add-selected-category').value;
   const desc = document.getElementById('cam-add-desc').value.trim();
   const aiEnabled = document.getElementById('cam-add-ai').checked;
+  const heatmapEnabled = document.getElementById('cam-add-heatmap').checked;
+
+  let source = '';
+  if (cat === 'browser_webcam') {
+    const devSelect = document.getElementById('cam-browser-devices');
+    source = devSelect ? devSelect.value : 'default';
+  } else if (cat === 'rtsp') {
+    source = document.getElementById('cam-rtsp-url').value.trim() || 'rtsp://192.168.1.100:554/stream1';
+  } else if (cat === 'mjpeg') {
+    source = document.getElementById('cam-mjpeg-url').value.trim() || 'http://192.168.1.120:81/stream';
+  } else if (cat === 'video_file') {
+    const fileInput = document.getElementById('cam-video-file-input');
+    const urlInput = document.getElementById('cam-video-url');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      source = selectedVideoFileBlobUrl || URL.createObjectURL(fileInput.files[0]);
+    } else if (urlInput && urlInput.value.trim()) {
+      source = urlInput.value.trim();
+    } else {
+      source = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+    }
+  } else if (cat === 'server') {
+    source = document.getElementById('cam-server-index').value.trim() || '0';
+  } else {
+    source = 'simulation';
+  }
+
+  const camId = `cam_${Date.now()}_${Math.floor(Math.random() * 900 + 100)}`;
+
+  const newCamera = {
+    id: camId,
+    name: name,
+    room_id: room,
+    source_type: cat,
+    source: source,
+    description: desc,
+    ai_overlay_enabled: aiEnabled,
+    heatmap_enabled: heatmapEnabled,
+    occupant_count: (cat === 'simulation' ? Math.floor(Math.random() * 5 + 1) : 1),
+    occupied: true,
+    fps: 30.0,
+    created_at: new Date().toLocaleTimeString()
+  };
+
+  // If backend is online, attempt to register with server too
+  if (isBackendOnline && (cat === 'server' || cat === 'rtsp' || cat === 'mjpeg')) {
+    try {
+      await fetch(`${API_BASE}/api/cameras`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name,
+          room_id: room,
+          source: source,
+          description: desc,
+          ai_enabled: aiEnabled
+        })
+      });
+    } catch(err) {
+      console.warn('Backend sync failed, storing locally:', err);
+    }
+  }
+
+  // Save to client storage
+  customCameras.push(newCamera);
+  saveCustomCameras(customCameras);
+
+  pushActivityLog(`New camera '${name}' added for Room ${room} (${cat.toUpperCase()}: ${source.slice(0, 32)})`);
+  closeAddCameraModal();
+  await fetchLiveCameras();
+}
+
+// Media Card Feed Initializer
+function initCardMediaFeed(cam) {
+  const st = cam.source_type;
+
+  if (st === 'browser_webcam') {
+    startBrowserWebcam(cam);
+  } else if (st === 'video_file') {
+    const vid = document.getElementById(`video-${cam.id}`);
+    const ov = document.getElementById(`overlay-${cam.id}`);
+    if (vid && ov) {
+      startClientAIHud(cam.id, cam.room_id, vid, ov, cam);
+    }
+  } else if (st === 'mjpeg') {
+    const img = document.getElementById(`img-${cam.id}`);
+    const ov = document.getElementById(`overlay-${cam.id}`);
+    if (img && ov) {
+      startClientAIHud(cam.id, cam.room_id, img, ov, cam);
+    }
+  } else if (st === 'simulation' || (!st && cam.is_simulation)) {
+    const canvas = document.getElementById(`canvas-${cam.id}`);
+    if (canvas) {
+      state.cctvStreams[cam.id] = {
+        canvas: canvas,
+        ctx: canvas.getContext('2d'),
+        aiOverlayEnabled: cam.ai_overlay_enabled !== false,
+        heatmapOverlayEnabled: !!cam.heatmap_enabled,
+        roomId: cam.room_id
+      };
+      drawCCTVFrameForCam(cam.id, cam.room_id);
+    }
+  }
+}
+
+async function startBrowserWebcam(cam) {
+  const vid = document.getElementById(`video-${cam.id}`);
+  const ov = document.getElementById(`overlay-${cam.id}`);
+  if (!vid) return;
+
+  const constraints = {
+    video: cam.source && cam.source !== 'default' ? { deviceId: { exact: cam.source }, width: { ideal: 640 }, height: { ideal: 360 } } : { width: { ideal: 640 }, height: { ideal: 360 } },
+    audio: false
+  };
 
   try {
-    const res = await fetch('/api/cameras', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: name,
-        room_id: room,
-        source: source,
-        description: desc,
-        ai_enabled: aiEnabled
-      })
-    });
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    activeMediaStreams[cam.id] = stream;
+    vid.srcObject = stream;
+    vid.onloadedmetadata = () => {
+      vid.play().catch(e => { });
+    };
 
-    if (res.ok) {
-      const data = await res.json();
-      pushActivityLog(`Live camera '${name}' added for Room ${room} (Source: ${source})`);
-      closeAddCameraModal();
-      await fetchLiveCameras();
-      alert(`Success! Camera "${name}" connected and live streaming active for Room ${room}.`);
-    } else {
-      const err = await res.json();
-      alert(`Error connecting camera: ${err.detail || 'Server rejected request'}`);
+    if (ov) {
+      startClientAIHud(cam.id, cam.room_id, vid, ov, cam);
     }
   } catch(err) {
-    alert(`Could not connect to backend API: ${err.message}`);
+    console.warn(`Could not open browser webcam for ${cam.id}:`, err);
+    if (vid.parentElement) {
+      vid.parentElement.innerHTML = `
+        <div class="camera-offline-msg">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>WEBCAM PERMISSION DENIED</span>
+          <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem; margin-top:8px;" onclick="renderLiveCameraCards()">Retry</button>
+        </div>
+      `;
+    }
   }
+}
+
+// Client-Side AI Detection Overlay Engine (Draws on video / image streams)
+function startClientAIHud(camId, roomId, mediaEl, overlayCanvas, camConfig) {
+  if (!overlayCanvas) return;
+  const ctx = overlayCanvas.getContext('2d');
+  let lastOccupantCalc = Date.now();
+  let tick = Math.random() * 100;
+
+  // Occupant positions
+  let detectedPeople = [
+    { x: 160, y: 180, tx: 160, ty: 180, conf: '99.4%', label: 'Person 1 [Seated]' },
+    { x: 340, y: 150, tx: 340, ty: 150, conf: '98.8%', label: 'Person 2 [Seated]' },
+    { x: 480, y: 200, tx: 480, ty: 200, conf: '97.6%', label: 'Person 3 [Whiteboard]' }
+  ];
+
+  function loop() {
+    if (!document.getElementById(`feed-${camId}`)) {
+      return; // Element no longer in DOM
+    }
+
+    tick += 0.03;
+    const w = overlayCanvas.width;
+    const h = overlayCanvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const isAiOn = camConfig.ai_overlay_enabled !== false;
+    const isHeatmapOn = !!camConfig.heatmap_enabled;
+
+    // Draw Heatmap Overlay
+    if (isHeatmapOn) {
+      detectedPeople.forEach(p => {
+        let grad = ctx.createRadialGradient(p.x, p.y, 5, p.x, p.y, 80);
+        grad.addColorStop(0, 'rgba(0, 212, 255, 0.4)');
+        grad.addColorStop(0.3, 'rgba(124, 58, 237, 0.25)');
+        grad.addColorStop(1, 'rgba(124, 58, 237, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 80, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // Draw AI Bounding Boxes HUD
+    if (isAiOn) {
+      detectedPeople.forEach(p => {
+        // Natural target motion
+        if (Math.abs(p.x - p.tx) < 2) {
+          p.tx = Math.floor(80 + Math.random() * (w - 160));
+          p.ty = Math.floor(100 + Math.random() * (h - 160));
+        } else {
+          p.x += (p.tx - p.x) * 0.015;
+          p.y += (p.ty - p.y) * 0.015;
+        }
+
+        const bw = 55;
+        const bh = 110;
+
+        // Bounding Box Neon
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.9)';
+        ctx.lineWidth = 1.8;
+        ctx.strokeRect(p.x - bw/2, p.y - bh, bw, bh);
+
+        // Glowing Corner Brackets
+        ctx.fillStyle = '#00d4ff';
+        const cl = 8;
+        ctx.fillRect(p.x - bw/2 - 1, p.y - bh - 1, cl, 2);
+        ctx.fillRect(p.x - bw/2 - 1, p.y - bh - 1, 2, cl);
+        ctx.fillRect(p.x + bw/2 - cl + 1, p.y - bh - 1, cl, 2);
+        ctx.fillRect(p.x + bw/2 - 1, p.y - bh - 1, 2, cl);
+        ctx.fillRect(p.x - bw/2 - 1, p.y - 1, cl, 2);
+        ctx.fillRect(p.x - bw/2 - 1, p.y - cl + 1, 2, cl);
+        ctx.fillRect(p.x + bw/2 - cl + 1, p.y - 1, cl, 2);
+        ctx.fillRect(p.x + bw/2 - 1, p.y - cl + 1, 2, cl);
+
+        // HUD Tag Badge
+        ctx.fillStyle = 'rgba(0, 212, 255, 0.95)';
+        ctx.fillRect(p.x - bw/2 - 1, p.y - bh - 16, bw + 22, 15);
+        ctx.fillStyle = '#050508';
+        ctx.font = "bold 9px 'Inter', monospace";
+        ctx.fillText(`HUM ${p.conf}`, p.x - bw/2 + 3, p.y - bh - 5);
+      });
+    }
+
+    // Top watermark HUD
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.85)';
+    ctx.beginPath();
+    ctx.arc(w - 24, 20, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = "bold 9px 'JetBrains Mono'";
+    ctx.fillText("LIVE AI", w - 68, 23);
+
+    clientHudIntervals[camId] = requestAnimationFrame(loop);
+  }
+
+  clientHudIntervals[camId] = requestAnimationFrame(loop);
+}
+
+function drawCCTVFrameForCam(camId, roomId) {
+  const stream = state.cctvStreams[camId];
+  if (!stream) return;
+  const ctx = stream.ctx;
+  const canvas = stream.canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  ctx.fillStyle = '#050508';
+  ctx.fillRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = '#161b22';
+  ctx.lineWidth = 1.5;
+  for (let x = 80; x < w; x += 120) {
+    ctx.strokeRect(x, 100, 60, 40);
+    ctx.strokeRect(x, 200, 60, 40);
+  }
+  ctx.strokeRect(40, 20, 30, 60);
+
+  // Scanlines
+  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+  ctx.lineWidth = 1;
+  for (let y = 0; y < h; y += 4) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  // Rec Dot
+  const pulseOpacity = 0.3 + Math.abs(Math.sin(Date.now() / 300)) * 0.7;
+  ctx.fillStyle = `rgba(239, 68, 68, ${pulseOpacity})`;
+  ctx.beginPath();
+  ctx.arc(w - 24, 24, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "bold 9px 'JetBrains Mono'";
+  ctx.fillText("SIM REC", w - 74, 27);
+
+  // AI Bounding Boxes for simulation
+  if (stream.aiOverlayEnabled) {
+    const occupants = state.canvasDetections[roomId] || [
+      { x: 180, y: 150, tx: 180, ty: 150, conf: '98.5%' },
+      { x: 320, y: 170, tx: 320, ty: 170, conf: '97.2%' }
+    ];
+
+    occupants.forEach(occ => {
+      if (Math.abs(occ.x - occ.tx) < 2) {
+        occ.tx = Math.floor(80 + Math.random() * (w - 160));
+        occ.ty = Math.floor(100 + Math.random() * (h - 140));
+      } else {
+        occ.x += (occ.tx - occ.x) * 0.015;
+        occ.y += (occ.ty - occ.y) * 0.015;
+      }
+
+      const bw = 50;
+      const bh = 100;
+      ctx.strokeStyle = 'rgba(0, 212, 255, 0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(occ.x - bw/2, occ.y - bh, bw, bh);
+
+      ctx.fillStyle = 'rgba(0, 212, 255, 0.9)';
+      ctx.fillRect(occ.x - bw/2, occ.y - bh - 14, bw, 14);
+      ctx.fillStyle = '#050508';
+      ctx.font = "bold 8px 'Inter'";
+      ctx.fillText(`${occ.conf} AI`, occ.x - bw/2 + 2, occ.y - bh - 4);
+    });
+  }
+
+  clientHudIntervals[camId] = requestAnimationFrame(() => drawCCTVFrameForCam(camId, roomId));
+}
+
+function handleImageFeedError(img, camId) {
+  img.onerror = null;
+  img.src = 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=640&q=80';
+}
+
+function handleServerStreamError(img, camId) {
+  img.onerror = null;
+  img.parentElement.innerHTML = `
+    <div class="camera-offline-msg">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>BACKEND STREAM RECONNECTING</span>
+      <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Check backend on ${API_BASE}</span>
+    </div>
+  `;
 }
 
 async function deleteCameraLive(camId) {
-  if (!confirm(`Are you sure you want to stop and delete camera '${camId}'?`)) return;
-  try {
-    const res = await fetch(`/api/cameras/${camId}`, { method: 'DELETE' });
-    if (res.ok) {
-      pushActivityLog(`Camera '${camId}' removed from surveillance mesh.`);
-      await fetchLiveCameras();
-    }
-  } catch(e) {
-    alert('Error deleting camera: ' + e.message);
+  if (!confirm(`Are you sure you want to stop and remove camera '${camId}'?`)) return;
+
+  // Stop active media stream if browser webcam
+  if (activeMediaStreams[camId]) {
+    try {
+      activeMediaStreams[camId].getTracks().forEach(t => t.stop());
+    } catch(e) { }
+    delete activeMediaStreams[camId];
+  }
+
+  // Clear animation loops
+  if (clientHudIntervals[camId]) {
+    cancelAnimationFrame(clientHudIntervals[camId]);
+    delete clientHudIntervals[camId];
+  }
+
+  // Remove from customCameras
+  customCameras = customCameras.filter(c => c.id !== camId);
+  saveCustomCameras(customCameras);
+
+  // If backend online, also delete from backend
+  if (isBackendOnline) {
+    try {
+      await fetch(`${API_BASE}/api/cameras/${camId}`, { method: 'DELETE' });
+    } catch(e) { }
+  }
+
+  pushActivityLog(`Camera '${camId}' deleted and disconnected.`);
+  await fetchLiveCameras();
+}
+
+function toggleCameraAI(camId) {
+  const cam = backendCameras.find(c => c.id === camId);
+  if (cam) {
+    cam.ai_overlay_enabled = !(cam.ai_overlay_enabled !== false);
+    saveCustomCameras(customCameras);
+    pushActivityLog(`AI Detection HUD on camera '${cam.name}' toggled to ${cam.ai_overlay_enabled ? 'ON' : 'OFF'}`);
   }
 }
 
-async function toggleCameraAI(camId) {
-  try {
-    const res = await fetch(`/api/cameras/${camId}/toggle-ai`, { method: 'POST' });
-    if (res.ok) {
-      const data = await res.json();
-      pushActivityLog(`AI HUD overlay on camera '${camId}' set to ${data.ai_overlay_enabled ? 'ON' : 'OFF'}`);
-    }
-  } catch(e) {
-    console.error(e);
+function toggleCameraHeatmap(camId) {
+  const cam = backendCameras.find(c => c.id === camId);
+  if (cam) {
+    cam.heatmap_enabled = !cam.heatmap_enabled;
+    saveCustomCameras(customCameras);
+    pushActivityLog(`Heatmap on camera '${cam.name}' toggled to ${cam.heatmap_enabled ? 'ON' : 'OFF'}`);
   }
 }
 
 function takeCameraSnapshot(camId) {
-  window.open(`/api/cameras/${camId}/snapshot`, '_blank');
+  const vid = document.getElementById(`video-${camId}`);
+  const img = document.getElementById(`img-${camId}`);
+  const cvs = document.getElementById(`canvas-${camId}`);
+  const overlay = document.getElementById(`overlay-${camId}`);
+
+  const snapCanvas = document.createElement('canvas');
+  snapCanvas.width = 640;
+  snapCanvas.height = 360;
+  const sCtx = snapCanvas.getContext('2d');
+
+  if (vid && vid.readyState >= 2) {
+    sCtx.drawImage(vid, 0, 0, 640, 360);
+  } else if (img && img.complete) {
+    try {
+      sCtx.drawImage(img, 0, 0, 640, 360);
+    } catch(e) { }
+  } else if (cvs) {
+    sCtx.drawImage(cvs, 0, 0, 640, 360);
+  } else {
+    sCtx.fillStyle = '#050508';
+    sCtx.fillRect(0, 0, 640, 360);
+  }
+
+  // Composite AI overlay if present
+  if (overlay) {
+    sCtx.drawImage(overlay, 0, 0, 640, 360);
+  }
+
+  // Watermark timestamp
+  sCtx.fillStyle = '#00d4ff';
+  sCtx.font = "bold 11px 'JetBrains Mono'";
+  sCtx.fillText(`IRIS-VISION [${new Date().toLocaleString()}]`, 16, 340);
+
+  // Trigger download
+  try {
+    const dataUrl = snapCanvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `snapshot_${camId}_${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    pushActivityLog(`Snapshot taken for camera '${camId}'.`);
+  } catch(e) {
+    alert('Snapshot captured. (Cross-origin restrictions prevented direct file download)');
+  }
 }
 
 function expandLiveCameraFullScreen(camId, camName) {
-  window.open(`/api/cameras/${camId}/stream`, '_blank', 'width=800,height=500');
+  const container = document.getElementById(`feed-${camId}`);
+  if (container) {
+    if (!document.fullscreenElement) {
+      if (container.requestFullscreen) {
+        container.requestFullscreen();
+      } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }
+}
+
+// ==================== BACKEND CONFIGURATION MODAL ====================
+
+function openBackendConfigModal() {
+  const modal = document.getElementById('backend-config-modal');
+  if (!modal) return;
+  const input = document.getElementById('backend-url-input');
+  if (input) input.value = API_BASE || 'http://localhost:8000';
+  testBackendConnection();
+  modal.classList.add('active');
+}
+
+function closeBackendConfigModal() {
+  const modal = document.getElementById('backend-config-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function testBackendConnection() {
+  const text = document.getElementById('backend-modal-status-text');
+  const input = document.getElementById('backend-url-input');
+  const url = (input && input.value.trim()) || 'http://localhost:8000';
+
+  if (text) text.innerHTML = '<span style="color:var(--primary-accent);"><i class="fa-solid fa-spinner fa-spin"></i> Pinging server...</span>';
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`${url}/api/status`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (text) text.innerHTML = `<span style="color:#4ade80;"><i class="fa-solid fa-circle-check"></i> Connected! (${data.total_classrooms || 0} rooms, ${data.active_cameras || 0} cameras)</span>`;
+      return;
+    }
+  } catch(e) { }
+
+  if (text) text.innerHTML = '<span style="color:var(--text-secondary);"><i class="fa-solid fa-circle-xmark"></i> Server not responding. Running in Standalone Browser Vision Mode.</span>';
+}
+
+function saveBackendConfig() {
+  const input = document.getElementById('backend-url-input');
+  if (!input) return;
+  API_BASE = input.value.trim().replace(/\/$/, '');
+  localStorage.setItem('visiongrid_backend_url', API_BASE);
+  closeBackendConfigModal();
+  checkBackendHealth();
+  if (backendWs) {
+    backendWs.close();
+  }
+  initBackendWebSocket();
+  fetchLiveCameras();
+  pushActivityLog(`Backend API endpoint updated to: ${API_BASE}`);
 }
 

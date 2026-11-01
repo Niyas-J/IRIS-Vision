@@ -484,15 +484,18 @@
               <span class="panel-subtitle"><span class="live-dot" style="background:var(--danger); box-shadow: 0 0 8px var(--danger);"></span> REC: AI Analytics Stream</span>
             </div>
             <div class="panel-actions">
-              <label class="remember-me" style="margin-right: 12px;">
+              <span id="backend-status-badge" class="backend-status-pill standalone" onclick="openBackendConfigModal()" title="Click to configure backend API endpoint">
+                <i class="fa-solid fa-server"></i> <span id="backend-status-text">Standalone Mode</span>
+              </span>
+              <label class="remember-me" style="margin-right: 8px;">
                 <input type="checkbox" id="cctv-detection-toggle" checked onchange="toggleAIDetectionOverlay(this)">
                 <span>AI Overlay</span>
               </label>
-              <label class="remember-me" style="margin-right: 16px;">
+              <label class="remember-me" style="margin-right: 12px;">
                 <input type="checkbox" id="cctv-heatmap-toggle" onchange="toggleHeatmapOverlay(this)">
-                <span>Heatmap Overlay</span>
+                <span>Heatmap</span>
               </label>
-              <button class="btn btn-secondary" onclick="triggerMockScreenshot()" style="padding: 10px 18px;"><i class="fa-solid fa-camera"></i> Snapshot All</button>
+              <button class="btn btn-secondary" onclick="triggerMockScreenshot()" style="padding: 10px 16px;"><i class="fa-solid fa-camera"></i> Snapshot All</button>
               <button class="btn btn-primary" onclick="openAddCameraModal()" style="padding: 10px 18px; margin-left: 8px; background: linear-gradient(135deg, #00d4ff, #7c3aed); border: none;"><i class="fa-solid fa-video"></i> + Add Camera</button>
             </div>
           </div>
@@ -866,38 +869,74 @@
     </div>
   </div>
 
-  <!-- ==================== ADD LIVE CAMERA MODAL ==================== -->
+  <!-- ==================== ADD LIVE CAMERA MODAL (MULTI-SOURCE) ==================== -->
   <div class="modal-overlay" id="add-camera-modal">
-    <div class="glass-card modal-card" style="max-width: 520px;">
+    <div class="glass-card modal-card" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:10px;">
           <div class="logo-box" style="width:36px; height:36px; font-size:1rem; border-radius:8px;"><i class="fa-solid fa-video"></i></div>
           <div>
-            <h3 style="margin:0;">Connect New Live Camera</h3>
-            <span style="font-size:0.8rem; color:var(--text-secondary);">Register local webcam, RTSP stream, or AI simulator</span>
+            <h3 style="margin:0;">Connect Any Camera Feed</h3>
+            <span style="font-size:0.8rem; color:var(--text-secondary);">USB Webcam, RTSP CCTV, ESP32-CAM, Phone Cam, Video File, or Simulation</span>
           </div>
         </div>
         <button class="modal-close-btn" onclick="closeAddCameraModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       
+      <!-- Camera Source Category Selector -->
+      <div style="margin-top: 14px; margin-bottom: 12px;">
+        <label class="form-label" style="margin-bottom: 8px;">Select Camera Type / Protocol</label>
+        <div class="cam-type-grid" id="cam-category-selector">
+          <button type="button" class="cam-type-btn active" data-type="browser_webcam" onclick="selectCameraCategory('browser_webcam')">
+            <i class="fa-solid fa-camera"></i>
+            <span>Browser / USB Cam</span>
+          </button>
+          <button type="button" class="cam-type-btn" data-type="rtsp" onclick="selectCameraCategory('rtsp')">
+            <i class="fa-solid fa-network-wired"></i>
+            <span>RTSP CCTV / NVR</span>
+          </button>
+          <button type="button" class="cam-type-btn" data-type="mjpeg" onclick="selectCameraCategory('mjpeg')">
+            <i class="fa-solid fa-tower-broadcast"></i>
+            <span>HTTP / ESP32-CAM</span>
+          </button>
+          <button type="button" class="cam-type-btn" data-type="video_file" onclick="selectCameraCategory('video_file')">
+            <i class="fa-solid fa-file-video"></i>
+            <span>Local Video / Clip</span>
+          </button>
+          <button type="button" class="cam-type-btn" data-type="server" onclick="selectCameraCategory('server')">
+            <i class="fa-solid fa-server"></i>
+            <span>Server VideoCapture</span>
+          </button>
+          <button type="button" class="cam-type-btn" data-type="simulation" onclick="selectCameraCategory('simulation')">
+            <i class="fa-solid fa-brain"></i>
+            <span>AI Simulated</span>
+          </button>
+        </div>
+      </div>
+
       <form onsubmit="handleAddCameraSubmit(event)">
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-          <div class="form-group">
-            <label class="form-label">Camera Display Name</label>
-            <input type="text" class="form-input" id="cam-add-name" placeholder="E.g., Classroom A101 Front Webcam" required style="padding-left:14px;">
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Target Classroom Location</label>
-            <select class="builder-select" id="cam-add-room">
-              <option value="A101">Room A101 — Computer Science Lab</option>
-              <option value="A102">Room A102 — Lecture Hall</option>
-              <option value="A103">Room A103 — Seminar Room</option>
-              <option value="B201">Room B201 — Physics Lab</option>
-              <option value="B202">Room B202 — Chemistry Lab</option>
-              <option value="B203">Room B203 — Biology Lab</option>
-              <option value="CUSTOM">+ Custom Room ID...</option>
-            </select>
+        <input type="hidden" id="cam-add-selected-category" value="browser_webcam">
+        
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Camera Name & Room -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label class="form-label">Camera Display Name</label>
+              <input type="text" class="form-input" id="cam-add-name" placeholder="E.g., Room A101 Main CCTV" required style="padding-left:14px;">
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Classroom Location</label>
+              <select class="builder-select" id="cam-add-room">
+                <option value="A101">Room A101 — Computer Science Lab</option>
+                <option value="A102">Room A102 — Lecture Hall</option>
+                <option value="A103">Room A103 — Seminar Room</option>
+                <option value="B201">Room B201 — Physics Lab</option>
+                <option value="B202">Room B202 — Chemistry Lab</option>
+                <option value="B203">Room B203 — Biology Lab</option>
+                <option value="CUSTOM">+ Custom Room ID...</option>
+              </select>
+            </div>
           </div>
 
           <div class="form-group" id="custom-room-group" style="display:none;">
@@ -905,43 +944,173 @@
             <input type="text" class="form-input" id="cam-add-custom-room" placeholder="E.g., C301" style="padding-left:14px;">
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Camera Source Type</label>
-            <select class="builder-select" id="cam-add-type" onchange="handleCameraTypeChange(this.value)">
-              <option value="0">Local Physical Webcam (Index 0 - Default USB / Laptop Cam)</option>
-              <option value="1">Secondary Webcam (Index 1 - External USB)</option>
-              <option value="rtsp">Network RTSP Stream (IP Camera)</option>
-              <option value="http">HTTP Video / MJPEG Stream</option>
-              <option value="simulation">Simulated AI Camera (Synthetic Occupancy Loop)</option>
-            </select>
+          <!-- Section 1: Browser / USB Webcam Controls -->
+          <div id="section-browser-webcam" class="cam-source-section">
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label class="form-label" style="margin:0;">Select Detected Local Video Device</label>
+                <button type="button" class="btn btn-ghost" style="padding:2px 8px; font-size:0.75rem;" onclick="detectLocalWebcams()"><i class="fa-solid fa-arrows-rotate"></i> Refresh Devices</button>
+              </div>
+              <select class="builder-select" id="cam-browser-devices">
+                <option value="default">Default System Webcam / USB Cam</option>
+              </select>
+              <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Direct browser hardware capture via WebRTC. Works completely offline or on Vercel without a backend!</span>
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Source Path / URL / Device Index</label>
-            <input type="text" class="form-input" id="cam-add-source" value="0" placeholder="0 or rtsp://admin:pass@ip:554/stream" required style="padding-left:14px;">
-            <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Use '0' or '1' for local webcams, RTSP/HTTP URLs for IP security cameras, or 'simulation'.</span>
+          <!-- Section 2: RTSP Stream Controls -->
+          <div id="section-rtsp" class="cam-source-section" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">RTSP Stream URL</label>
+              <input type="text" class="form-input" id="cam-rtsp-url" placeholder="rtsp://admin:password@192.168.1.100:554/stream1" style="padding-left:14px;">
+              
+              <div style="margin-top: 6px;">
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Quick Presets:</span>
+                <div class="preset-pills">
+                  <span class="preset-pill" onclick="applyRTSPPreset('hikvision')">Hikvision</span>
+                  <span class="preset-pill" onclick="applyRTSPPreset('dahua')">Dahua</span>
+                  <span class="preset-pill" onclick="applyRTSPPreset('tapo')">TP-Link Tapo</span>
+                  <span class="preset-pill" onclick="applyRTSPPreset('reolink')">Reolink</span>
+                  <span class="preset-pill" onclick="applyRTSPPreset('axis')">Axis</span>
+                  <span class="preset-pill" onclick="applyRTSPPreset('generic')">Generic RTSP</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Description (Optional)</label>
-            <input type="text" class="form-input" id="cam-add-desc" placeholder="Wide angle ceiling mount facing whiteboard" style="padding-left:14px;">
+          <!-- Section 3: HTTP / MJPEG Stream Controls -->
+          <div id="section-mjpeg" class="cam-source-section" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">HTTP / MJPEG Stream URL</label>
+              <input type="text" class="form-input" id="cam-mjpeg-url" placeholder="http://192.168.1.50:8080/video" style="padding-left:14px;">
+              
+              <div style="margin-top: 6px;">
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Common Devices:</span>
+                <div class="preset-pills">
+                  <span class="preset-pill" onclick="applyMJPEGPreset('esp32')">ESP32-CAM (:81/stream)</span>
+                  <span class="preset-pill" onclick="applyMJPEGPreset('ipwebcam')">Android IP Webcam (:8080/video)</span>
+                  <span class="preset-pill" onclick="applyMJPEGPreset('droidcam')">DroidCam (:4747/video)</span>
+                  <span class="preset-pill" onclick="applyMJPEGPreset('public')">Sample MJPEG Feed</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div style="display:flex; align-items:center; gap:10px; margin-top:4px;">
-            <input type="checkbox" id="cam-add-ai" checked style="accent-color:var(--primary-accent); width:18px; height:18px;">
-            <label for="cam-add-ai" style="font-size:0.85rem; color:var(--text-primary); cursor:pointer;">
-              Enable Real-Time OpenCV HOG Human Detection HUD Overlay
-            </label>
+          <!-- Section 4: Local Video File / CCTV Clip Upload -->
+          <div id="section-video-file" class="cam-source-section" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Choose Local Video File (MP4, WebM, MOV)</label>
+              <input type="file" class="form-input" id="cam-video-file-input" accept="video/mp4,video/webm,video/ogg,video/quicktime" onchange="handleVideoFileSelected(this)" style="padding:8px 14px;">
+              <div style="margin-top: 8px;">
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Or enter Video Clip URL:</span>
+                <input type="text" class="form-input" id="cam-video-url" placeholder="https://assets.mixkit.co/videos/preview/...mp4" style="padding-left:14px; margin-top:4px;">
+                <div class="preset-pills" style="margin-top:6px;">
+                  <span class="preset-pill" onclick="applySampleVideo('classroom')">Sample Classroom Footage</span>
+                  <span class="preset-pill" onclick="applySampleVideo('hallway')">Sample Hallway CCTV</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 5: Server OpenCV Device Index -->
+          <div id="section-server" class="cam-source-section" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Server Camera Index / Hardware ID</label>
+              <input type="text" class="form-input" id="cam-server-index" value="0" placeholder="0 for primary webcam, 1 for external USB" style="padding-left:14px;">
+              <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Requires Python backend running on localhost:8000. Uses OpenCV DirectShow capture.</span>
+            </div>
+          </div>
+
+          <!-- Section 6: AI Simulated Camera -->
+          <div id="section-simulation" class="cam-source-section" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Simulated Environment Template</label>
+              <select class="builder-select" id="cam-sim-template">
+                <option value="lab">Active Computer Science Lab (Dynamic movement, 18-24 occupants)</option>
+                <option value="lecture">Lecture Hall (Seated amphitheater, 35-45 occupants)</option>
+                <option value="empty">Empty Classroom (Standby idle test)</option>
+                <option value="cycling">Auto-cycling Schedule (Occupied -> Vacated loop)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Live Modal Test Preview Box -->
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <label class="form-label" style="margin:0;">Live Feed Verification</label>
+              <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem;" onclick="testCameraPreview()"><i class="fa-solid fa-play"></i> Test Feed Preview</button>
+            </div>
+            <div class="cam-preview-box" id="cam-modal-preview">
+              <span>Click "Test Feed Preview" to preview the camera stream</span>
+            </div>
+          </div>
+
+          <!-- Description and AI Options -->
+          <div class="form-group">
+            <label class="form-label">Description / Mount Notes (Optional)</label>
+            <input type="text" class="form-input" id="cam-add-desc" placeholder="Ceiling mount looking at student workstations" style="padding-left:14px;">
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <input type="checkbox" id="cam-add-ai" checked style="accent-color:var(--primary-accent); width:18px; height:18px;">
+              <label for="cam-add-ai" style="font-size:0.85rem; color:var(--text-primary); cursor:pointer;">
+                Enable Real-Time AI Detection HUD (Human Bounding Box & Confidence Overlay)
+              </label>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <input type="checkbox" id="cam-add-heatmap" style="accent-color:var(--secondary-accent); width:18px; height:18px;">
+              <label for="cam-add-heatmap" style="font-size:0.85rem; color:var(--text-primary); cursor:pointer;">
+                Enable Real-Time Thermal Heatmap Overlay
+              </label>
+            </div>
           </div>
         </div>
         
-        <div style="display:flex; justify-content: flex-end; gap: 12px; margin-top:24px;">
+        <div style="display:flex; justify-content: flex-end; gap: 12px; margin-top:20px;">
           <button type="button" class="btn btn-ghost" onclick="closeAddCameraModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg, #00d4ff, #7c3aed); border:none;">
+          <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg, #00d4ff, #7c3aed); border:none; padding:10px 24px;">
             <i class="fa-solid fa-play"></i> Launch Live Stream
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ==================== BACKEND API CONFIG MODAL ==================== -->
+  <div class="modal-overlay" id="backend-config-modal">
+    <div class="glass-card modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="logo-box" style="width:36px; height:36px; font-size:1rem; border-radius:8px;"><i class="fa-solid fa-server"></i></div>
+          <div>
+            <h3 style="margin:0;">Backend Server Connection</h3>
+            <span style="font-size:0.8rem; color:var(--text-secondary);">Configure FastAPI AI & MJPEG Streaming Endpoint</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeBackendConfigModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div style="margin-top:16px; display:flex; flex-direction:column; gap:16px;">
+        <div class="form-group">
+          <label class="form-label">Backend API Base URL</label>
+          <input type="text" class="form-input" id="backend-url-input" placeholder="http://localhost:8000" style="padding-left:14px;">
+          <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Use 'http://localhost:8000' for local backend, or your deployed cloud backend URL.</span>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px;">
+          <div>
+            <div style="font-size:0.85rem; font-weight:600;">Status Check:</div>
+            <div id="backend-modal-status-text" style="font-size:0.8rem; color:var(--text-secondary);">Click 'Test Connection' to check</div>
+          </div>
+          <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:0.8rem;" onclick="testBackendConnection()"><i class="fa-solid fa-signal"></i> Test Connection</button>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
+          <button type="button" class="btn btn-ghost" onclick="closeBackendConfigModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="saveBackendConfig()" style="padding:10px 20px;">Save & Reconnect</button>
+        </div>
+      </div>
     </div>
   </div>
 

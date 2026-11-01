@@ -1832,15 +1832,34 @@ async function testCameraPreview() {
   previewBox.innerHTML = '<span style="color:var(--primary-accent);"><i class="fa-solid fa-spinner fa-spin"></i> Initializing feed test...</span>';
 
   if (cat === 'browser_webcam') {
+    const isSecure = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isSecure && window.location.protocol === 'file:') {
+      previewBox.innerHTML = `
+        <div style="padding:14px; text-align:center; color:#f59e0b;">
+          <i class="fa-solid fa-shield-halved" style="font-size:1.8rem; margin-bottom:6px;"></i>
+          <div style="font-weight:600; font-size:0.9rem; color:#fff;">HTTPS or Localhost Required</div>
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
+            Browsers block hardware webcams on <code>file:///</code> URLs.<br>
+            Run on <b>http://localhost:3000</b> or deploy to <b>Vercel/Firebase (HTTPS)</b> for live webcam access!
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     const devSelect = document.getElementById('cam-browser-devices');
     const deviceId = devSelect ? devSelect.value : 'default';
-    const constraints = {
-      video: deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : true,
-      audio: false
-    };
+    const videoConstraint = (deviceId && deviceId !== 'default' && deviceId.length > 5)
+      ? { deviceId: { ideal: deviceId }, width: { ideal: 640 }, height: { ideal: 360 } }
+      : { width: { ideal: 640 }, height: { ideal: 360 } };
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: false });
+      } catch(e) {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       previewMediaStream = stream;
       previewBox.innerHTML = '<video id="preview-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover;"></video>';
       const vid = document.getElementById('preview-video');
@@ -2033,13 +2052,36 @@ async function startBrowserWebcam(cam) {
   const ov = document.getElementById(`overlay-${cam.id}`);
   if (!vid) return;
 
-  const constraints = {
-    video: cam.source && cam.source !== 'default' ? { deviceId: { exact: cam.source }, width: { ideal: 640 }, height: { ideal: 360 } } : { width: { ideal: 640 }, height: { ideal: 360 } },
-    audio: false
-  };
+  const isSecure = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isSecure && window.location.protocol === 'file:') {
+    if (vid.parentElement) {
+      vid.parentElement.innerHTML = `
+        <div class="camera-offline-msg" style="padding:16px; text-align:center;">
+          <i class="fa-solid fa-shield-halved" style="color:#f59e0b; font-size:2rem; margin-bottom:8px;"></i>
+          <span style="color:#fff; font-weight:600;">HTTPS or Localhost Required</span>
+          <span style="font-size:0.75rem; color:var(--text-secondary); max-width:320px; margin-top:4px; line-height:1.4;">
+            Chrome & Edge block hardware webcams on <code>file:///</code> URLs.<br>
+            Run on <b>http://localhost:3000</b> or deploy to <b>Vercel/Firebase (HTTPS)</b> for live webcam access!
+          </span>
+          <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem; margin-top:10px;" onclick="renderLiveCameraCards()">Refresh</button>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  const videoConstraint = (cam.source && cam.source !== 'default' && cam.source.length > 5)
+    ? { deviceId: { ideal: cam.source }, width: { ideal: 640 }, height: { ideal: 360 } }
+    : { width: { ideal: 640 }, height: { ideal: 360 } };
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: false });
+    } catch(e) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+
     activeMediaStreams[cam.id] = stream;
     vid.srcObject = stream;
     vid.onloadedmetadata = () => {
@@ -2055,7 +2097,8 @@ async function startBrowserWebcam(cam) {
       vid.parentElement.innerHTML = `
         <div class="camera-offline-msg">
           <i class="fa-solid fa-triangle-exclamation"></i>
-          <span>WEBCAM PERMISSION DENIED</span>
+          <span>WEBCAM ACCESS ISSUE</span>
+          <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">${err.message || 'Permission denied or in use'}</span>
           <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem; margin-top:8px;" onclick="renderLiveCameraCards()">Retry</button>
         </div>
       `;

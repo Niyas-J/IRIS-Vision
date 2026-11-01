@@ -8,34 +8,26 @@
     "ai_overlay_enabled": false
   },
   {
-    "id": "cam_a102",
-    "name": "Room A102 Lecture Hall",
-    "room_id": "A102",
-    "source": "simulation",
-    "description": "Lecture Hall A102 simulated wide-angle surveillance stream",
-    "ai_overlay_enabled": true
-  },
-  {
-    "id": "cam_333_946",
-    "name": "333",
-    "room_id": "A102",
-    "source": "1",
-    "description": "",
-    "ai_overlay_enabled": false
-  },
-  {
-    "id": "cam_44_534",
-    "name": "44",
+    "id": "cam_cam_878",
+    "name": "cam",
     "room_id": "A101",
     "source": "1",
     "description": "",
     "ai_overlay_enabled": true
   },
   {
-    "id": "cam_222_571",
-    "name": "222",
+    "id": "cam_esp_369",
+    "name": "esp",
     "room_id": "A101",
-    "source": "1",
+    "source": "http://192.168.1.100:8765/coordinates",
+    "description": "",
+    "ai_overlay_enabled": true
+  },
+  {
+    "id": "cam_esp32_488",
+    "name": "esp32",
+    "room_id": "A101",
+    "source": "http://192.168.1.100:8765/coordinates",
     "description": "",
     "ai_overlay_enabled": true
   }

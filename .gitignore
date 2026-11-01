@@ -28,3 +28,13 @@ yarn-error.log*
 *.swo
 .DS_Store
 Thumbs.db
+
+# AI Training Runs & Datasets
+runs/
+ai-engine/runs/
+ai-engine/dataset/
+
+# Root local runtime artifacts
+/cameras.json
+/yolov8n.pt
+

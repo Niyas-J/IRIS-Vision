@@ -10,14 +10,16 @@ import numpy as np
 
 logger = logging.getLogger("VisionGrid-CameraEngine")
 
-# Initialize OpenCV HOG Human Detector
+from accurate_detector import HighAccuracyHumanDetector
+
+# Initialize Global High-Accuracy Human Detector Engine
 try:
-    hog = cv2.HOGDescriptor()
-    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-    HOG_INITIALIZED = True
+    global_human_detector = HighAccuracyHumanDetector(confidence_threshold=0.45)
+    DETECTOR_INITIALIZED = True
 except Exception as e:
-    logger.error(f"Failed to initialize OpenCV HOG: {e}")
-    HOG_INITIALIZED = False
+    logger.error(f"Failed to initialize HighAccuracyHumanDetector: {e}")
+    global_human_detector = None
+    DETECTOR_INITIALIZED = False
 
 
 class CameraStream:
@@ -46,12 +48,16 @@ class CameraStream:
         self.status = "Initializing"
         self.fps = 0.0
         self.detected_rects: List[Tuple[int, int, int, int]] = []
+        self.detected_items: List[Dict[str, Any]] = []
         self.occupant_count = 0
         self.last_detection_time = 0.0
-        self.detection_interval = 0.8  # Run HOG detector every 0.8s
+        self.detection_interval = 0.6  # High-rate neural inference
         self.frame_count = 0
         self.last_fps_calc = time.time()
         self.created_at = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        # High-Accuracy Neural Detector
+        self.detector = global_human_detector or HighAccuracyHumanDetector(confidence_threshold=0.45)
 
         # Simulation animation states
         self.sim_tick = 0.0
@@ -205,17 +211,24 @@ class CameraStream:
             logger.error(f"HOG Detection error: {e}")
             return []
 
-    def _draw_hud(self, frame: np.ndarray, rects: List[Tuple[int, int, int, int]]) -> np.ndarray:
-        """Renders high-tech AI Vision HUD overlay with neon bounding boxes and telemetry."""
+    def _draw_hud(self, frame: np.ndarray, items: List[Any]) -> np.ndarray:
+        """Renders high-tech AI Vision HUD overlay with neon bounding boxes, confidence tags, and telemetry."""
         h, w = frame.shape[:2]
         hud_frame = frame.copy()
 
         # 1. Draw Bounding Boxes on occupants
         neon_cyan = (255, 212, 0)   # BGR for #00d4ff
         neon_green = (80, 230, 80)
-        box_color = neon_cyan if len(rects) > 0 else (120, 120, 120)
+        box_color = neon_cyan if len(items) > 0 else (120, 120, 120)
 
-        for (x, y, rw, rh) in rects:
+        for item in items:
+            if isinstance(item, dict):
+                x, y, rw, rh = item.get("box", (0, 0, 0, 0))
+                label = item.get("label", "PERSON [98.4%]")
+            else:
+                x, y, rw, rh = item
+                label = "HUMAN [98.4%]"
+
             # Ensure coordinates stay within frame bounds
             x = max(0, min(x, w - 1))
             y = max(0, min(y, h - 1))
@@ -226,7 +239,7 @@ class CameraStream:
             cv2.rectangle(hud_frame, (x, y), (x + rw, y + rh), box_color, 2)
 
             # Corner brackets
-            corner_len = min(20, rw // 4, rh // 4)
+            corner_len = min(20, max(5, rw // 4), max(5, rh // 4))
             # Top-left
             cv2.line(hud_frame, (x, y), (x + corner_len, y), neon_green, 3)
             cv2.line(hud_frame, (x, y), (x, y + corner_len), neon_green, 3)
@@ -245,11 +258,11 @@ class CameraStream:
             cv2.drawMarker(hud_frame, (cx, cy), neon_cyan, markerType=cv2.MARKER_CROSS, markerSize=12, thickness=1)
 
             # Label banner
-            label = "HUMAN [98.4%]"
-            cv2.rectangle(hud_frame, (x, max(0, y - 22)), (x + 125, max(0, y)), (20, 25, 35), -1)
-            cv2.rectangle(hud_frame, (x, max(0, y - 22)), (x + 125, max(0, y)), neon_cyan, 1)
+            banner_w = len(label) * 8 + 10
+            cv2.rectangle(hud_frame, (x, max(0, y - 22)), (x + banner_w, max(0, y)), (20, 25, 35), -1)
+            cv2.rectangle(hud_frame, (x, max(0, y - 22)), (x + banner_w, max(0, y)), neon_cyan, 1)
             cv2.putText(hud_frame, label, (x + 5, max(14, y - 6)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, neon_cyan, 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.40, neon_cyan, 1)
 
         # 2. Top Header Bar Overlay
         cv2.rectangle(hud_frame, (0, 0), (w, 36), (15, 20, 26), -1)
@@ -266,7 +279,7 @@ class CameraStream:
         cv2.putText(hud_frame, title_text, (95, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 212, 255), 1)
 
         # Occupancy Badge
-        occ_count = len(rects)
+        occ_count = len(items)
         if occ_count > 0:
             badge_text = f"OCCUPIED: {occ_count} PERSONS"
             badge_color = (80, 230, 80)  # Green
@@ -286,8 +299,9 @@ class CameraStream:
         time_str = time.strftime("%Y-%m-%d %H:%M:%S")
         cv2.putText(hud_frame, time_str, (10, h - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (160, 175, 190), 1)
 
-        info_str = f"FPS: {self.fps:.1f}  |  RES: {w}x{h}  |  SOURCE: {self.source[:15]}  |  AI: HOG-SVM"
-        cv2.putText(hud_frame, info_str, (190, h - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (140, 160, 180), 1)
+        backend_name = getattr(self.detector, 'active_backend', 'AI Engine') if self.detector else 'Ensemble AI'
+        info_str = f"FPS: {self.fps:.1f}  |  RES: {w}x{h}  |  AI: {backend_name[:26]}"
+        cv2.putText(hud_frame, info_str, (180, h - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (140, 160, 180), 1)
 
         return hud_frame
 
@@ -317,11 +331,18 @@ class CameraStream:
             now = time.time()
             if now - self.last_detection_time >= self.detection_interval:
                 if self.is_simulation:
+                    self.detected_items = [{"box": r, "confidence": 98.4, "label": "PERSON [98.4%]"} for r in sim_rects]
                     self.detected_rects = sim_rects
+                    self.occupant_count = len(sim_rects)
                 else:
-                    self.detected_rects = self._run_hog_detection(frame)
+                    if self.detector:
+                        self.occupant_count, self.detected_items = self.detector.detect(frame)
+                        self.detected_rects = [it["box"] for it in self.detected_items]
+                    else:
+                        self.detected_rects = self._run_hog_detection(frame)
+                        self.detected_items = [{"box": r, "confidence": 90.0, "label": "HUMAN"} for r in self.detected_rects]
+                        self.occupant_count = len(self.detected_rects)
 
-                self.occupant_count = len(self.detected_rects)
                 self.last_detection_time = now
 
                 # Dispatch occupancy update to RoomManager
@@ -331,7 +352,7 @@ class CameraStream:
 
             # Apply HUD if enabled
             if self.ai_overlay_enabled:
-                processed_frame = self._draw_hud(frame, self.detected_rects)
+                processed_frame = self._draw_hud(frame, self.detected_items)
             else:
                 processed_frame = frame
 

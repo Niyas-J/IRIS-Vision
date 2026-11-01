@@ -14,7 +14,7 @@ class HighAccuracyHumanDetector:
     Combines Deep Learning (YOLOv8 / OpenCV DNN), upper-body cascades for seated students,
     and temporal smoothing to achieve 98-99%+ real-time accuracy with zero false flickers.
     """
-    def __init__(self, confidence_threshold: float = 0.45, nms_threshold: float = 0.40):
+    def __init__(self, confidence_threshold: float = 0.55, nms_threshold: float = 0.40):
         self.conf_threshold = confidence_threshold
         self.nms_threshold = nms_threshold
         self.active_backend = "Initializing"
